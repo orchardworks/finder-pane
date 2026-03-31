@@ -67,6 +67,61 @@ def _get_swift_binary():
     return binary_path
 
 class FinderHandler(SimpleHTTPRequestHandler):
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        content_len = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(content_len)) if content_len else {}
+
+        if parsed.path == "/api/trash":
+            self.trash_item(body.get("path", ""))
+        elif parsed.path == "/api/rename":
+            self.rename_item(body.get("path", ""), body.get("name", ""))
+        else:
+            self.send_error(404)
+
+    def trash_item(self, filepath):
+        """Move file/folder to Trash via macOS API."""
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            self.send_error(404, "Not found")
+            return
+        try:
+            # Use macOS 'trash' via osascript for proper Trash behavior
+            subprocess.run(
+                ["osascript", "-e",
+                 f'tell application "Finder" to delete POSIX file "{filepath}"'],
+                check=True, capture_output=True, timeout=5,
+            )
+            self._json_response({"ok": True})
+        except Exception as e:
+            self.send_error(500, str(e))
+
+    def rename_item(self, filepath, new_name):
+        """Rename a file or folder."""
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            self.send_error(404, "Not found")
+            return
+        if not new_name or "/" in new_name:
+            self.send_error(400, "Invalid name")
+            return
+        new_path = os.path.join(os.path.dirname(filepath), new_name)
+        if os.path.exists(new_path):
+            self.send_error(409, "Already exists")
+            return
+        try:
+            os.rename(filepath, new_path)
+            self._json_response({"ok": True, "path": new_path})
+        except Exception as e:
+            self.send_error(500, str(e))
+
+    def _json_response(self, data):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 

@@ -348,6 +348,44 @@
     line-height: 1.8;
   }
 
+  /* Context menu */
+  .context-menu {
+    position: fixed;
+    background: var(--toolbar-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  .context-menu.hidden { display: none; }
+  .context-menu-item {
+    padding: 5px 14px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .context-menu-item:hover { background: var(--selected); }
+  .context-menu-item.danger { color: #f44; }
+  .context-menu-sep {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* Inline rename input */
+  .rename-input {
+    background: var(--bg);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    padding: 0 4px;
+    border-radius: 3px;
+    outline: none;
+    min-width: 80px;
+  }
+
   /* Toggle */
   .toggle-btn {
     font-size: 11px !important;
@@ -388,6 +426,12 @@
 </div>
 
 <div class="statusbar" id="statusbar"></div>
+<div class="context-menu hidden" id="context-menu">
+  <div class="context-menu-item" data-action="open">Open</div>
+  <div class="context-menu-item" data-action="rename">Rename</div>
+  <div class="context-menu-sep"></div>
+  <div class="context-menu-item danger" data-action="trash">Move to Trash</div>
+</div>
 
 <script>
 const HOME = null; // resolved server-side
@@ -774,6 +818,7 @@ function renderFiles() {
   for (const { entry, depth } of flatRows) {
     const row = document.createElement("div");
     row.className = "file-row" + (entry.hidden ? " hidden-file" : "") + (entry.path === selectedPath ? " selected" : "");
+    row.dataset.path = entry.path;
     const indent = depth * 20;
     const isExpanded = expandedDirs.has(entry.path);
     const toggleCls = entry.is_dir ? ("tree-toggle" + (isExpanded ? " expanded" : "")) : "tree-toggle placeholder";
@@ -791,6 +836,7 @@ function renderFiles() {
       e.stopPropagation();
       toggleExpand(entry);
     };
+    row.oncontextmenu = (e) => showContextMenu(e, entry);
     row.onclick = () => {
       selectedPath = entry.path;
       renderFiles();
@@ -902,6 +948,96 @@ window.addEventListener("popstate", (e) => {
     navigate(e.state.dir, false);
   }
 });
+
+// Context menu
+let contextEntry = null;
+const ctxMenu = $("#context-menu");
+
+function showContextMenu(e, entry) {
+  e.preventDefault();
+  contextEntry = entry;
+  ctxMenu.classList.remove("hidden");
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + "px";
+  ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 120) + "px";
+}
+
+function hideContextMenu() {
+  ctxMenu.classList.add("hidden");
+  contextEntry = null;
+}
+
+document.addEventListener("click", hideContextMenu);
+document.addEventListener("contextmenu", (e) => {
+  if (!e.target.closest(".file-row")) hideContextMenu();
+});
+
+ctxMenu.querySelectorAll(".context-menu-item").forEach(item => {
+  item.onclick = async () => {
+    const entry = contextEntry;
+    hideContextMenu();
+    if (!entry) return;
+    const action = item.dataset.action;
+
+    if (action === "open") {
+      if (entry.is_dir) navigate(entry.path);
+      else fetch("/api/open?path=" + encodeURIComponent(entry.path));
+    } else if (action === "rename") {
+      startRename(entry);
+    } else if (action === "trash") {
+      if (!confirm(`Move "${entry.name}" to Trash?`)) return;
+      try {
+        const res = await fetch("/api/trash", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: entry.path }),
+        });
+        if (res.ok) navigate(currentDir, false);
+        else alert("Failed to delete: " + (await res.text()));
+      } catch (e) { alert("Error: " + e.message); }
+    }
+  };
+});
+
+function startRename(entry) {
+  const row = document.querySelector(`.file-row[data-path="${CSS.escape(entry.path)}"]`);
+  if (!row) return;
+  const nameSpan = row.querySelector(".file-name span:last-child");
+  const original = entry.name;
+  const input = document.createElement("input");
+  input.className = "rename-input";
+  input.value = original;
+  // Select name without extension for files
+  const dotIdx = !entry.is_dir ? original.lastIndexOf(".") : -1;
+  nameSpan.replaceWith(input);
+  input.focus();
+  if (dotIdx > 0) input.setSelectionRange(0, dotIdx);
+  else input.select();
+
+  const commit = async () => {
+    const newName = input.value.trim();
+    if (!newName || newName === original) {
+      navigate(currentDir, false);
+      return;
+    }
+    try {
+      const res = await fetch("/api/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: entry.path, name: newName }),
+      });
+      if (res.ok) navigate(currentDir, false);
+      else alert("Failed to rename: " + (await res.text()));
+    } catch (e) { alert("Error: " + e.message); }
+  };
+
+  input.onblur = commit;
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    if (e.key === "Escape") { input.value = original; input.blur(); }
+    e.stopPropagation();
+  };
+  input.onclick = (e) => e.stopPropagation();
+}
 
 // Sidebar resize
 {
