@@ -213,7 +213,7 @@
   /* Preview pane */
   .preview-pane {
     width: 300px;
-    min-width: 200px;
+    min-width: 150px;
     border-left: 1px solid var(--border);
     background: var(--sidebar-bg);
     display: flex;
@@ -222,8 +222,21 @@
     justify-content: center;
     overflow: hidden;
     flex-shrink: 0;
+    position: relative;
   }
   .preview-pane.hidden { display: none; }
+  .preview-resize-handle {
+    width: 5px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    cursor: col-resize;
+    z-index: 2;
+  }
+  .preview-resize-handle:hover, .preview-resize-handle.dragging {
+    background: var(--accent);
+  }
   .preview-pane img, .preview-pane video {
     max-width: 100%;
     max-height: 100%;
@@ -355,7 +368,9 @@
       </div>
       <div class="file-list" id="file-list"></div>
     </div>
-    <div class="preview-pane hidden" id="preview-pane"></div>
+    <div class="preview-pane hidden" id="preview-pane">
+      <div class="preview-resize-handle" id="preview-resize"></div>
+    </div>
   </div>
 </div>
 
@@ -621,6 +636,18 @@ function addLineNumbers(highlighted) {
   ).join("\n");
 }
 
+function setPreviewContent(html) {
+  const pane = $("#preview-pane");
+  // Keep the resize handle, replace everything else
+  const handle = $("#preview-resize");
+  pane.innerHTML = "";
+  pane.appendChild(handle);
+  const content = document.createElement("div");
+  content.style.cssText = "display:contents";
+  content.innerHTML = html;
+  while (content.firstChild) pane.appendChild(content.firstChild);
+}
+
 async function renderPreview(entry) {
   const pane = $("#preview-pane");
   if (!entry) {
@@ -632,38 +659,38 @@ async function renderPreview(entry) {
   const fileUrl = encodeURI(entry.path);
 
   if (entry.is_dir) {
-    pane.innerHTML = `
+    setPreviewContent(`
       <div class="preview-info">
         <div class="preview-icon">${getIcon(entry)}</div>
         <div class="preview-name">${escHtml(entry.name)}</div>
         <div class="preview-meta">Folder<br>Modified: ${formatDate(entry.modified)}</div>
-      </div>`;
+      </div>`);
   } else if (IMAGE_EXTS.has(ext)) {
-    pane.innerHTML = `<img src="${fileUrl}" alt="${escHtml(entry.name)}">`;
+    setPreviewContent(`<img src="${fileUrl}" alt="${escHtml(entry.name)}">`);
   } else if (VIDEO_EXTS.has(ext)) {
-    pane.innerHTML = `<video src="${fileUrl}" controls autoplay muted></video>`;
+    setPreviewContent(`<video src="${fileUrl}" controls autoplay muted></video>`);
   } else if (ext === ".html" || ext === ".htm") {
-    pane.innerHTML = `<iframe src="${fileUrl}" sandbox="allow-same-origin"></iframe>`;
+    setPreviewContent(`<iframe src="${fileUrl}" sandbox="allow-same-origin"></iframe>`);
   } else if (MD_EXTS.has(ext)) {
     try {
       const res = await fetch(fileUrl);
       const text = await res.text();
-      pane.innerHTML = `<div class="preview-markdown">${renderMarkdown(text)}</div>`;
-    } catch { pane.innerHTML = `<div class="preview-info">Failed to load</div>`; }
+      setPreviewContent(`<div class="preview-markdown">${renderMarkdown(text)}</div>`);
+    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else if (ext === ".json") {
     try {
       const res = await fetch(fileUrl);
       const text = await res.text();
-      pane.innerHTML = `<div class="preview-code">${addLineNumbers(highlightJson(text))}</div>`;
-    } catch { pane.innerHTML = `<div class="preview-info">Failed to load</div>`; }
+      setPreviewContent(`<div class="preview-code">${addLineNumbers(highlightJson(text))}</div>`);
+    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else if (CODE_EXTS.has(ext)) {
     try {
       const res = await fetch(fileUrl);
       const text = await res.text();
-      pane.innerHTML = `<div class="preview-code">${addLineNumbers(highlightCode(text, ext))}</div>`;
-    } catch { pane.innerHTML = `<div class="preview-info">Failed to load</div>`; }
+      setPreviewContent(`<div class="preview-code">${addLineNumbers(highlightCode(text, ext))}</div>`);
+    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else {
-    pane.innerHTML = `
+    setPreviewContent(`
       <div class="preview-info">
         <div class="preview-icon">${getIcon(entry)}</div>
         <div class="preview-name">${escHtml(entry.name)}</div>
@@ -671,7 +698,7 @@ async function renderPreview(entry) {
           ${formatSize(entry.size)}<br>
           Modified: ${formatDate(entry.modified)}
         </div>
-      </div>`;
+      </div>`);
   }
 }
 
@@ -860,6 +887,36 @@ window.addEventListener("popstate", (e) => {
     navigate(e.state.dir, false);
   }
 });
+
+// Preview pane resize
+{
+  const handle = $("#preview-resize");
+  const pane = $("#preview-pane");
+  const saved = localStorage.getItem("wls-preview-width");
+  if (saved) pane.style.width = saved + "px";
+
+  let dragging = false;
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const newWidth = window.innerWidth - e.clientX;
+    if (newWidth >= 150 && newWidth <= window.innerWidth * 0.6) {
+      pane.style.width = newWidth + "px";
+    }
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    localStorage.setItem("wls-preview-width", parseInt(pane.style.width));
+  });
+}
 
 // Init — URLパスがディレクトリなら直接開く
 const initPath = decodeURI(window.location.pathname);
