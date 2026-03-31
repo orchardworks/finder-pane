@@ -413,6 +413,33 @@
     background: var(--accent) !important;
     border-color: var(--accent) !important;
   }
+
+  /* Responsive: narrow (< 600px) — cmux split pane etc. */
+  @media (max-width: 600px) {
+    .sidebar { display: none; }
+    .preview-pane { display: none !important; }
+    .col-header, .file-row {
+      grid-template-columns: 1fr;
+    }
+    .file-size, .file-date,
+    .col-header span[data-sort="size"],
+    .col-header span[data-sort="modified"] { display: none; }
+    .toolbar { gap: 4px; padding: 4px 8px; }
+    .search-box { width: 80px; }
+    .breadcrumb { min-width: 60px; }
+  }
+
+  /* Responsive: medium (600–900px) */
+  @media (min-width: 601px) and (max-width: 900px) {
+    .sidebar { width: 140px; min-width: 100px; }
+    .preview-pane { display: none !important; }
+    .col-header, .file-row {
+      grid-template-columns: 1fr 80px;
+    }
+    .file-date,
+    .col-header span[data-sort="modified"] { display: none; }
+    .search-box { width: 120px; }
+  }
 </style>
 </head>
 <body>
