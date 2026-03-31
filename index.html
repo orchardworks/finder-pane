@@ -95,12 +95,25 @@
   /* Sidebar */
   .sidebar {
     width: 170px;
-    min-width: 140px;
+    min-width: 100px;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border);
     overflow-y: auto;
     padding: 8px 0;
     flex-shrink: 0;
+    position: relative;
+  }
+  .sidebar-resize-handle {
+    width: 5px;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    cursor: col-resize;
+    z-index: 2;
+  }
+  .sidebar-resize-handle:hover, .sidebar-resize-handle.dragging {
+    background: var(--accent);
   }
   .sidebar-section {
     padding: 6px 14px 4px;
@@ -358,7 +371,7 @@
 </div>
 
 <div class="main">
-  <div class="sidebar" id="sidebar"></div>
+  <div class="sidebar" id="sidebar"><div class="sidebar-resize-handle" id="sidebar-resize"></div></div>
   <div class="file-area-wrapper">
     <div class="file-area">
       <div class="col-header">
@@ -478,7 +491,9 @@ async function loadFavorites() {
 
 function renderSidebar() {
   const sb = $("#sidebar");
+  const handle = $("#sidebar-resize");
   sb.innerHTML = `<div class="sidebar-section">Favorites</div>`;
+  sb.appendChild(handle);
   for (const fav of favorites) {
     const el = document.createElement("div");
     el.className = "sidebar-item" + (currentDir.replace(/\/$/, "") === fav.path.replace(/\/$/, "") ? " active" : "");
@@ -887,6 +902,36 @@ window.addEventListener("popstate", (e) => {
     navigate(e.state.dir, false);
   }
 });
+
+// Sidebar resize
+{
+  const handle = $("#sidebar-resize");
+  const sidebar = $("#sidebar");
+  const saved = localStorage.getItem("wls-sidebar-width");
+  if (saved) sidebar.style.width = saved + "px";
+
+  let dragging = false;
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    handle.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+  });
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const newWidth = e.clientX;
+    if (newWidth >= 100 && newWidth <= window.innerWidth * 0.4) {
+      sidebar.style.width = newWidth + "px";
+    }
+  });
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    localStorage.setItem("wls-sidebar-width", parseInt(sidebar.style.width));
+  });
+}
 
 // Preview pane resize
 {
