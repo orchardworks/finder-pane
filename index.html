@@ -225,7 +225,18 @@
     color: var(--text-dim);
     border-top: 1px solid var(--border);
     background: var(--toolbar-bg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
+  .statusbar-brand a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 10px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+  .statusbar-brand a:hover { opacity: 1; }
 
   /* Preview pane */
   .preview-pane {
@@ -516,7 +527,10 @@
   </div>
 </div>
 
-<div class="statusbar" id="statusbar"></div>
+<div class="statusbar">
+  <span id="statusbar"></span>
+  <span class="statusbar-brand"><a href="https://github.com/orchardworks/wls" target="_blank">orchardworks/wls</a></span>
+</div>
 <div class="context-menu hidden" id="context-menu">
   <div class="context-menu-item" data-action="open">Open</div>
   <div class="context-menu-item" data-action="rename">Rename</div>
