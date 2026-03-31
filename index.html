@@ -85,31 +85,12 @@
   }
   .search-box:focus { border-color: var(--accent); }
 
-  /* Split container */
-  .split-container {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
-  }
-  .split-divider {
-    height: 5px;
-    background: var(--toolbar-bg);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    cursor: row-resize;
-    flex-shrink: 0;
-  }
-  .split-divider:hover, .split-divider.dragging { background: var(--accent); }
-  .split-divider.hidden { display: none; }
-
   /* Main layout */
   .main {
     display: flex;
     flex: 1;
     overflow: hidden;
   }
-  .main.hidden { display: none; }
 
   /* Sidebar */
   .sidebar {
@@ -244,18 +225,7 @@
     color: var(--text-dim);
     border-top: 1px solid var(--border);
     background: var(--toolbar-bg);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
   }
-  .statusbar-brand a {
-    color: var(--text-dim);
-    text-decoration: none;
-    font-size: 10px;
-    opacity: 0.6;
-    transition: opacity 0.2s;
-  }
-  .statusbar-brand a:hover { opacity: 1; }
 
   /* Preview pane */
   .preview-pane {
@@ -522,50 +492,31 @@
   <button id="btn-forward" title="Forward">→</button>
   <button id="btn-up" title="Parent directory">↑</button>
   <div class="breadcrumb" id="breadcrumb"></div>
-  <button class="toggle-btn" id="btn-split" title="Split view">⬒</button>
   <button class="toggle-btn" id="btn-view-list" title="List view">☰</button>
   <button class="toggle-btn" id="btn-view-cols" title="Column view">▥</button>
   <button class="toggle-btn" id="btn-hidden" title="Show hidden files">.*</button>
   <input type="text" class="search-box" id="search" placeholder="Filter…">
 </div>
 
-<div class="split-container" id="split-container">
-  <div class="main" id="pane-top">
-    <div class="sidebar" id="sidebar"><div class="sidebar-resize-handle" id="sidebar-resize"></div></div>
-    <div class="file-area-wrapper">
-      <div class="file-area" id="list-view">
-        <div class="col-header">
-          <span data-sort="name">Name</span>
-          <span data-sort="size">Size</span>
-          <span data-sort="modified">Modified</span>
-        </div>
-        <div class="file-list" id="file-list"></div>
+<div class="main">
+  <div class="sidebar" id="sidebar"><div class="sidebar-resize-handle" id="sidebar-resize"></div></div>
+  <div class="file-area-wrapper">
+    <div class="file-area" id="list-view">
+      <div class="col-header">
+        <span data-sort="name">Name</span>
+        <span data-sort="size">Size</span>
+        <span data-sort="modified">Modified</span>
       </div>
-      <div class="column-view hidden" id="column-view"></div>
-      <div class="preview-pane hidden" id="preview-pane">
-        <div class="preview-resize-handle" id="preview-resize"></div>
-      </div>
+      <div class="file-list" id="file-list"></div>
     </div>
-  </div>
-  <div class="split-divider hidden" id="split-divider"></div>
-  <div class="main hidden" id="pane-bottom">
-    <div class="file-area-wrapper">
-      <div class="file-area" id="list-view-2">
-        <div class="col-header">
-          <span>Name</span>
-          <span>Size</span>
-          <span>Modified</span>
-        </div>
-        <div class="file-list" id="file-list-2"></div>
-      </div>
+    <div class="column-view hidden" id="column-view"></div>
+    <div class="preview-pane hidden" id="preview-pane">
+      <div class="preview-resize-handle" id="preview-resize"></div>
     </div>
   </div>
 </div>
 
-<div class="statusbar">
-  <span id="statusbar"></span>
-  <span class="statusbar-brand"><a href="https://github.com/orchardworks/wls" target="_blank">orchardworks/wls</a></span>
-</div>
+<div class="statusbar" id="statusbar"></div>
 <div class="context-menu hidden" id="context-menu">
   <div class="context-menu-item" data-action="open">Open</div>
   <div class="context-menu-item" data-action="rename">Rename</div>
@@ -582,8 +533,6 @@ let history = [];
 let historyIdx = -1;
 let showHidden = false;
 let viewMode = localStorage.getItem("wls-view-mode") || "list"; // "list" or "columns"
-let splitDir = null; // bottom pane directory
-let splitEntries = [];
 let sortKey = "name";
 let sortAsc = true;
 let filterText = "";
@@ -1190,135 +1139,6 @@ function escHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// Split view: bottom pane
-async function navigateSplit(dir) {
-  try {
-    const res = await fetch("/api/ls?dir=" + encodeURIComponent(dir));
-    const data = await res.json();
-    splitDir = data.dir;
-    splitEntries = data.entries;
-    renderSplitPane();
-    updateSplitUrl();
-  } catch (e) { console.error(e); }
-}
-
-function renderSplitPane() {
-  const container = $("#file-list-2");
-  container.innerHTML = "";
-  const filtered = sortEntries(filterEntries(splitEntries));
-
-  for (const entry of filtered) {
-    const row = document.createElement("div");
-    row.className = "file-row" + (entry.hidden ? " hidden-file" : "");
-    row.dataset.path = entry.path;
-    row.innerHTML = `
-      <div class="file-name">
-        <span class="file-icon">${getIcon(entry)}</span>
-        <span>${escHtml(entry.name)}</span>
-      </div>
-      <div class="file-size">${entry.is_dir ? "—" : formatSize(entry.size)}</div>
-      <div class="file-date">${formatDate(entry.modified)}</div>
-    `;
-    row.onclick = () => {
-      container.querySelectorAll(".selected").forEach(r => r.classList.remove("selected"));
-      row.classList.add("selected");
-      renderPreview(entry);
-    };
-    row.ondblclick = () => {
-      if (entry.is_dir) navigateSplit(entry.path);
-      else fetch("/api/open?path=" + encodeURIComponent(entry.path));
-    };
-    row.oncontextmenu = (e) => showContextMenu(e, entry);
-    // Drag support
-    row.draggable = true;
-    row.ondragstart = (e) => {
-      e.dataTransfer.setData("application/json", JSON.stringify([entry.path]));
-      e.dataTransfer.effectAllowed = "move";
-    };
-    if (entry.is_dir) {
-      row.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; row.classList.add("drop-target"); };
-      row.ondragleave = () => row.classList.remove("drop-target");
-      row.ondrop = async (e) => {
-        e.preventDefault();
-        row.classList.remove("drop-target");
-        const paths = JSON.parse(e.dataTransfer.getData("application/json") || "[]");
-        if (paths.length === 0 || paths.includes(entry.path)) return;
-        try {
-          const res = await fetch("/api/move", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paths, dest: entry.path }),
-          });
-          if (res.ok) { navigate(currentDir, false); if (splitDir) navigateSplit(splitDir); }
-          else alert("Move failed: " + (await res.text()));
-        } catch (err) { alert("Error: " + err.message); }
-      };
-    }
-    container.appendChild(row);
-  }
-}
-
-// Also allow drop on the bottom pane background (move into splitDir)
-$("#file-list-2").ondragover = (e) => { if (splitDir) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; } };
-$("#file-list-2").ondrop = async (e) => {
-  e.preventDefault();
-  if (!splitDir) return;
-  const paths = JSON.parse(e.dataTransfer.getData("application/json") || "[]");
-  if (paths.length === 0) return;
-  try {
-    const res = await fetch("/api/move", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paths, dest: splitDir }),
-    });
-    if (res.ok) { navigate(currentDir, false); navigateSplit(splitDir); }
-    else alert("Move failed: " + (await res.text()));
-  } catch (err) { alert("Error: " + err.message); }
-};
-
-// Also allow drop on top pane file-list background
-$("#file-list").ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
-$("#file-list").ondrop = async (e) => {
-  e.preventDefault();
-  const paths = JSON.parse(e.dataTransfer.getData("application/json") || "[]");
-  if (paths.length === 0) return;
-  try {
-    const res = await fetch("/api/move", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paths, dest: currentDir }),
-    });
-    if (res.ok) { navigate(currentDir, false); if (splitDir) navigateSplit(splitDir); }
-    else alert("Move failed: " + (await res.text()));
-  } catch (err) { alert("Error: " + err.message); }
-};
-
-function toggleSplit() {
-  if (splitDir) {
-    // Close split
-    splitDir = null;
-    splitEntries = [];
-    $("#pane-bottom").classList.add("hidden");
-    $("#split-divider").classList.add("hidden");
-    $("#btn-split").classList.remove("active");
-    updateSplitUrl();
-  } else {
-    // Open split with current directory
-    $("#pane-bottom").classList.remove("hidden");
-    $("#split-divider").classList.remove("hidden");
-    $("#btn-split").classList.add("active");
-    navigateSplit(currentDir);
-  }
-}
-
-function updateSplitUrl() {
-  const base = encodeURI(currentDir);
-  const url = splitDir ? base + "?split=" + encodeURIComponent(splitDir) : base;
-  if (window.location.pathname + window.location.search !== url) {
-    window.history.replaceState({ dir: currentDir, split: splitDir }, "", url);
-  }
-}
-
 let favoritesLoaded = false;
 
 async function navigate(dir, pushHistory = true) {
@@ -1347,7 +1167,10 @@ async function navigate(dir, pushHistory = true) {
     }
 
     // URLバーを現在のディレクトリに同期
-    updateSplitUrl();
+    const newUrl = encodeURI(currentDir);
+    if (window.location.pathname !== newUrl) {
+      window.history.replaceState({ dir: currentDir }, "", newUrl);
+    }
 
     updateNav();
     renderSidebar();
@@ -1378,7 +1201,6 @@ $("#btn-forward").onclick = () => {
 };
 $("#btn-up").onclick = () => { if (parentDir && parentDir !== currentDir) navigate(parentDir); };
 
-$("#btn-split").onclick = toggleSplit;
 $("#btn-view-list").onclick = () => switchView("list");
 $("#btn-view-cols").onclick = () => switchView("columns");
 
@@ -1415,12 +1237,6 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("popstate", (e) => {
   if (e.state && e.state.dir) {
     navigate(e.state.dir, false);
-    if (e.state.split) {
-      if (!splitDir) toggleSplit();
-      navigateSplit(e.state.split);
-    } else if (splitDir) {
-      toggleSplit();
-    }
   }
 });
 
@@ -1531,35 +1347,6 @@ function startRename(entry) {
   input.onclick = (e) => e.stopPropagation();
 }
 
-// Split divider resize
-{
-  const divider = $("#split-divider");
-  const topPane = $("#pane-top");
-  const container = $("#split-container");
-  let dragging = false;
-  divider.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    dragging = true;
-    divider.classList.add("dragging");
-    document.body.style.cursor = "row-resize";
-  });
-  document.addEventListener("mousemove", (e) => {
-    if (!dragging) return;
-    const rect = container.getBoundingClientRect();
-    const ratio = (e.clientY - rect.top) / rect.height;
-    if (ratio > 0.2 && ratio < 0.8) {
-      topPane.style.flex = `${ratio}`;
-      $("#pane-bottom").style.flex = `${1 - ratio}`;
-    }
-  });
-  document.addEventListener("mouseup", () => {
-    if (!dragging) return;
-    dragging = false;
-    divider.classList.remove("dragging");
-    document.body.style.cursor = "";
-  });
-}
-
 // Sidebar resize
 {
   const handle = $("#sidebar-resize");
@@ -1626,14 +1413,7 @@ $("#btn-view-cols").classList.toggle("active", viewMode === "columns");
 $("#list-view").classList.toggle("hidden", viewMode !== "list");
 $("#column-view").classList.toggle("hidden", viewMode !== "columns");
 const initPath = decodeURI(window.location.pathname);
-const initParams = new URLSearchParams(window.location.search);
-const initSplit = initParams.get("split");
-navigate(initPath.length > 1 ? initPath : "~").then(() => {
-  if (initSplit) {
-    toggleSplit();
-    navigateSplit(decodeURIComponent(initSplit));
-  }
-});
+navigate(initPath.length > 1 ? initPath : "~");
 </script>
 </body>
 </html>
