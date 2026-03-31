@@ -4,16 +4,46 @@ Web-based Finder-like file browser for macOS. "web ls" — browse your filesyste
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue) ![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
 
-## Features
+## Why wls?
 
-- **Finder sidebar sync** — reads your actual Finder sidebar favorites via `LSSharedFileList` API (Swift)
-- **Volumes/Locations** — mounted external drives automatically appear in the sidebar
-- **Tree expansion** — click `▶` on folders to expand inline, just like Finder's list view
-- **Image/video preview** — single-click a file to preview images (`png`, `jpg`, `gif`, `webp`, `heic`, ...) and videos (`mp4`, `mov`, `mkv`, ...) in a side pane
-- **URL = path** — the browser URL reflects the current directory (e.g., `http://localhost:8234/Users/you/Desktop`), and direct URL access works
-- **Sort, filter, hidden files** — click column headers to sort, type to filter, toggle `.*` to show hidden files
-- **Keyboard navigation** — `Backspace` to go up a directory
-- **Zero dependencies** — pure Python standard library + a small Swift snippet (compiled and cached automatically)
+When working in the terminal with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), you often need to:
+
+- **See directory structure at a glance** — `ls` and `tree` don't give you the full picture
+- **Preview images** — check generated images or screenshots without leaving the terminal
+- **Preview videos** — quickly verify video output
+
+wls is a Finder-like file browser that runs in a browser pane. Combined with [cmux](https://cmux.dev), you can keep a file browser right next to Claude Code — browse directory trees, preview images and videos, all without switching windows.
+
+### cmux + Claude Code
+
+```
+┌─────────────────────┬──────────────────────┐
+│                     │                      │
+│   Claude Code       │   wls (browser)      │
+│                     │                      │
+│  > generate image   │  📁 output/           │
+│  > show me in wls   │    🖼️ result.png  ◀── │
+│                     │    [preview pane]     │
+│                     │                      │
+└─────────────────────┴──────────────────────┘
+```
+
+Tell Claude Code "show me in wls" and it opens the file in a cmux browser pane.
+
+## Install
+
+```sh
+git clone https://github.com/orchardworks/wls.git
+cd wls
+```
+
+### Claude Code skill
+
+wls ships with a Claude Code skill. Once installed, saying things like "show me in wls" or "I want to see the directory structure" will automatically start wls and display files.
+
+```sh
+ln -s "$(pwd)/skill" ~/.claude/skills/wls
+```
 
 ## Quick start
 
@@ -22,26 +52,42 @@ Web-based Finder-like file browser for macOS. "web ls" — browse your filesyste
 ./start.sh 9000     # or specify a port
 ```
 
-Then open `http://localhost:8234` in your browser.
+Open `http://localhost:8234` in your browser.
+
+### With cmux
+
+```sh
+cmux browser open http://localhost:8234
+```
+
+## Features
+
+- **Finder sidebar sync** — reads your actual Finder sidebar favorites via `LSSharedFileList` API (Swift)
+- **Volumes/Locations** — mounted external drives automatically appear in the sidebar
+- **Tree expansion** — click `▶` on folders to expand inline, just like Finder's list view
+- **Image/video preview** — single-click a file to preview images (`png`, `jpg`, `gif`, `webp`, `heic`, ...) and videos (`mp4`, `mov`, `mkv`, ...) in a side pane
+- **URL = path** — the browser URL reflects the current directory (e.g., `localhost:8234/Users/you/Desktop`), and direct URL access works
+- **Sort, filter, hidden files** — click column headers to sort, type to filter, toggle `.*` to show hidden files
+- **Zero dependencies** — pure Python standard library + a small Swift snippet (compiled and cached automatically)
 
 ## Requirements
 
-- macOS (uses `LSSharedFileList` API for Finder favorites, `open` command for file opening)
+- macOS
 - Python 3.8+
-- Xcode Command Line Tools (for `swiftc` — the Swift compiler, used to read Finder sidebar)
+- Xcode Command Line Tools (`swiftc` — used to read Finder sidebar)
 
-## How it works
+## API
 
-`server.py` runs a lightweight HTTP server that serves:
+`server.py` runs a lightweight HTTP server:
 
 | Endpoint | Description |
 |---|---|
-| `/` | The single-page UI (`index.html`) |
-| `/api/ls?dir=PATH` | JSON directory listing |
+| `/` | Single-page UI (`index.html`) |
+| `/api/ls?dir=PATH` | Directory listing (JSON) |
 | `/api/favorites` | Finder sidebar favorites (via compiled Swift binary) |
 | `/api/volumes` | Mounted volumes from `/Volumes/` |
 | `/api/file?path=PATH` | Raw file content with correct MIME type |
-| `/api/open?path=PATH` | Opens file with macOS default app |
+| `/api/open?path=PATH` | Open file with macOS default app |
 | `/*` | Any path serves the file directly, or the UI if it's a directory |
 
 ## License
