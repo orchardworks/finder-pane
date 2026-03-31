@@ -232,7 +232,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     overflow: hidden;
     flex-shrink: 0;
     position: relative;
@@ -254,6 +254,7 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
+    margin: auto;
   }
   .preview-pane iframe {
     width: 100%;
@@ -347,6 +348,23 @@
     color: var(--text-dim);
     line-height: 1.8;
   }
+  .preview-folder-list {
+    width: 100%;
+    overflow: auto;
+    flex: 1;
+    padding: 0 12px 12px;
+    text-align: left;
+  }
+  .preview-folder-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .preview-folder-item:hover { background: var(--hover); }
 
   /* Context menu */
   .context-menu {
@@ -718,12 +736,41 @@ async function renderPreview(entry) {
   const fileUrl = encodeURI(entry.path);
 
   if (entry.is_dir) {
-    setPreviewContent(`
-      <div class="preview-info">
-        <div class="preview-icon">${getIcon(entry)}</div>
-        <div class="preview-name">${escHtml(entry.name)}</div>
-        <div class="preview-meta">Folder<br>Modified: ${formatDate(entry.modified)}</div>
-      </div>`);
+    // Fetch folder contents for preview
+    try {
+      const res = await fetch("/api/ls?dir=" + encodeURIComponent(entry.path));
+      const data = await res.json();
+      const items = data.entries.filter(e => !e.hidden);
+      const dirs = items.filter(e => e.is_dir).length;
+      const files = items.filter(e => !e.is_dir).length;
+      const summary = `${items.length} items — ${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
+      const listHtml = items.slice(0, 30).map(e =>
+        `<div class="preview-folder-item" data-path="${escHtml(e.path)}" data-isdir="${e.is_dir}">` +
+        `<span class="file-icon" style="font-size:14px">${getIcon(e)}</span>` +
+        `<span>${escHtml(e.name)}</span></div>`
+      ).join("");
+      setPreviewContent(`
+        <div class="preview-info" style="flex-shrink:0">
+          <div class="preview-icon">${getIcon(entry)}</div>
+          <div class="preview-name">${escHtml(entry.name)}</div>
+          <div class="preview-meta">${summary}</div>
+        </div>
+        <div class="preview-folder-list">${listHtml}${items.length > 30 ? `<div style="padding:4px 8px;font-size:11px;color:var(--text-dim)">… and ${items.length - 30} more</div>` : ""}</div>`);
+      // Click items in folder preview
+      pane.querySelectorAll(".preview-folder-item").forEach(el => {
+        el.onclick = () => {
+          if (el.dataset.isdir === "true") navigate(el.dataset.path);
+          else fetch("/api/open?path=" + encodeURIComponent(el.dataset.path));
+        };
+      });
+    } catch {
+      setPreviewContent(`
+        <div class="preview-info">
+          <div class="preview-icon">${getIcon(entry)}</div>
+          <div class="preview-name">${escHtml(entry.name)}</div>
+          <div class="preview-meta">Folder<br>Modified: ${formatDate(entry.modified)}</div>
+        </div>`);
+    }
   } else if (IMAGE_EXTS.has(ext)) {
     setPreviewContent(`<img src="${fileUrl}" alt="${escHtml(entry.name)}">`);
   } else if (VIDEO_EXTS.has(ext)) {
