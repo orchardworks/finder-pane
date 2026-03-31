@@ -462,7 +462,8 @@ let showHidden = false;
 let sortKey = "name";
 let sortAsc = true;
 let filterText = "";
-let selectedPath = null;
+let selectedPaths = new Set();
+let lastClickedPath = null;
 const expandedDirs = new Map(); // path → children entries
 
 const $ = (s) => document.querySelector(s);
@@ -864,7 +865,7 @@ function renderFiles() {
 
   for (const { entry, depth } of flatRows) {
     const row = document.createElement("div");
-    row.className = "file-row" + (entry.hidden ? " hidden-file" : "") + (entry.path === selectedPath ? " selected" : "");
+    row.className = "file-row" + (entry.hidden ? " hidden-file" : "") + (selectedPaths.has(entry.path) ? " selected" : "");
     row.dataset.path = entry.path;
     const indent = depth * 20;
     const isExpanded = expandedDirs.has(entry.path);
@@ -884,9 +885,28 @@ function renderFiles() {
       toggleExpand(entry);
     };
     row.oncontextmenu = (e) => showContextMenu(e, entry);
-    row.onclick = () => {
-      selectedPath = entry.path;
+    row.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl+click: toggle individual
+        if (selectedPaths.has(entry.path)) selectedPaths.delete(entry.path);
+        else selectedPaths.add(entry.path);
+      } else if (e.shiftKey && lastClickedPath) {
+        // Shift+click: range select
+        const paths = flatRows.map(r => r.entry.path);
+        const from = paths.indexOf(lastClickedPath);
+        const to = paths.indexOf(entry.path);
+        if (from !== -1 && to !== -1) {
+          const [start, end] = from < to ? [from, to] : [to, from];
+          for (let i = start; i <= end; i++) selectedPaths.add(paths[i]);
+        }
+      } else {
+        // Normal click: single select
+        selectedPaths.clear();
+        selectedPaths.add(entry.path);
+      }
+      lastClickedPath = entry.path;
       renderFiles();
+      // Preview the last clicked item
       renderPreview(entry);
     };
     row.ondblclick = () => {
@@ -902,7 +922,9 @@ function renderFiles() {
   const topList = sortEntries(filterEntries(entries));
   const dirs = topList.filter(e => e.is_dir).length;
   const files = topList.filter(e => !e.is_dir).length;
-  $("#statusbar").textContent = `${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
+  let status = `${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
+  if (selectedPaths.size > 1) status += ` — ${selectedPaths.size} selected`;
+  $("#statusbar").textContent = status;
 }
 
 function escHtml(s) {
@@ -918,7 +940,8 @@ async function navigate(dir, pushHistory = true) {
     currentDir = data.dir;
     parentDir = data.parent;
     entries = data.entries;
-    selectedPath = null;
+    selectedPaths.clear();
+    lastClickedPath = null;
     filterText = "";
     $("#search").value = "";
     expandedDirs.clear();
@@ -1002,10 +1025,18 @@ const ctxMenu = $("#context-menu");
 
 function showContextMenu(e, entry) {
   e.preventDefault();
+  // If right-clicked item isn't in selection, select only it
+  if (!selectedPaths.has(entry.path)) {
+    selectedPaths.clear();
+    selectedPaths.add(entry.path);
+    renderFiles();
+  }
   contextEntry = entry;
   ctxMenu.classList.remove("hidden");
   ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 180) + "px";
   ctxMenu.style.top = Math.min(e.clientY, window.innerHeight - 120) + "px";
+  // Hide rename if multiple selected
+  ctxMenu.querySelector('[data-action="rename"]').style.display = selectedPaths.size > 1 ? "none" : "";
 }
 
 function hideContextMenu() {
@@ -1026,20 +1057,29 @@ ctxMenu.querySelectorAll(".context-menu-item").forEach(item => {
     const action = item.dataset.action;
 
     if (action === "open") {
-      if (entry.is_dir) navigate(entry.path);
-      else fetch("/api/open?path=" + encodeURIComponent(entry.path));
+      if (selectedPaths.size > 1) {
+        for (const p of selectedPaths) fetch("/api/open?path=" + encodeURIComponent(p));
+      } else {
+        if (entry.is_dir) navigate(entry.path);
+        else fetch("/api/open?path=" + encodeURIComponent(entry.path));
+      }
     } else if (action === "rename") {
       startRename(entry);
     } else if (action === "trash") {
-      if (!confirm(`Move "${entry.name}" to Trash?`)) return;
+      const paths = [...selectedPaths];
+      const msg = paths.length > 1
+        ? `Move ${paths.length} items to Trash?`
+        : `Move "${entry.name}" to Trash?`;
+      if (!confirm(msg)) return;
       try {
-        const res = await fetch("/api/trash", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: entry.path }),
-        });
-        if (res.ok) navigate(currentDir, false);
-        else alert("Failed to delete: " + (await res.text()));
+        for (const p of paths) {
+          await fetch("/api/trash", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: p }),
+          });
+        }
+        navigate(currentDir, false);
       } catch (e) { alert("Error: " + e.message); }
     }
   };
