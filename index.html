@@ -530,9 +530,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--text-dim);
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
@@ -573,9 +574,19 @@
   }
   .tray-item.selected .tray-path { color: rgba(255,255,255,0.7); }
   .tray-empty {
-    color: var(--text-dim);
+    color: var(--text);
+    opacity: 0.6;
+    font-size: 12px;
+    padding: 10px 12px;
+    line-height: 1.6;
+  }
+  .tray-empty kbd {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
     font-size: 11px;
-    padding: 6px 10px;
+    font-family: inherit;
   }
   .tray-drop-active { background: rgba(0,122,255,0.1); }
 
@@ -695,7 +706,7 @@
         <button id="tray-clear" class="hidden">Clear</button>
       </div>
       <div class="tray-items" id="tray-items">
-        <div class="tray-empty">Stage files here from any folder, then drag them to move or copy across directories.</div>
+        <div class="tray-empty">Stage files here from any folder, then drag them to move or copy across directories.<br>Press <kbd>T</kbd> to add selected files to Tray.</div>
       </div>
     </div>
   </div>
@@ -1712,7 +1723,7 @@ function renderTray() {
     title.textContent = "Tray";
     clearBtn.classList.add("hidden");
     panel.style.height = "";
-    container.innerHTML = '<div class="tray-empty">Stage files here from any folder, then drag them to move or copy across directories.</div>';
+    container.innerHTML = '<div class="tray-empty">Stage files here from any folder, then drag them to move or copy across directories.<br>Press <kbd>T</kbd> to add selected files to Tray.</div>';
     return;
   }
 
