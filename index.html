@@ -757,6 +757,10 @@ let trayItems = JSON.parse(sessionStorage.getItem("wls-tray") || "[]");
 let traySelectedPaths = new Set();
 let trayActive = false; // true when tray has focus
 
+// Focus area: "main" | "tray" | "sidebar"
+let focusArea = "main";
+let sidebarSelectedIndex = -1;
+
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
@@ -1253,6 +1257,7 @@ function renderFiles() {
     row.oncontextmenu = (e) => showContextMenu(e, entry);
     row.onclick = (e) => {
       trayActive = false;
+      focusArea = "main";
       traySelectedPaths.clear();
       if (e.metaKey || e.ctrlKey) {
         // Cmd/Ctrl+click: toggle individual
@@ -1335,7 +1340,7 @@ function renderFiles() {
   const files = topList.filter(e => !e.is_dir).length;
   let status = `${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
   if (selectedPaths.size > 1) status += ` — ${selectedPaths.size} selected`;
-  $("#statusbar").textContent = status;
+  $("#statusbar").innerHTML = `${status}<span style="float:right;opacity:0.5">Press <kbd style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 3px;font-size:10px">?</kbd> for shortcuts</span>`;
 }
 
 // Column view (Miller columns)
@@ -1365,6 +1370,8 @@ async function renderColumnView() {
         ${entry.is_dir ? '<span class="miller-item-arrow">▶</span>' : ""}
       `;
       item.onclick = async () => {
+        focusArea = "main";
+        trayActive = false;
         col.selected = entry.path;
         // Remove columns after this one
         columnData = columnData.slice(0, ci + 1);
@@ -1504,8 +1511,192 @@ $$(".col-header span").forEach(el => {
 
 $("#search").oninput = (e) => { filterText = e.target.value; renderCurrentView(); };
 
+// Helper: get visible items list for current focus area
+function getVisibleItems() {
+  if (focusArea === "main") {
+    if (viewMode === "columns") {
+      // Use the last column with a selection, or the last column
+      for (let i = columnData.length - 1; i >= 0; i--) {
+        if (columnData[i].selected) return sortEntries(filterEntries(columnData[i].entries));
+      }
+      return sortEntries(filterEntries(columnData[0]?.entries || entries));
+    }
+    return sortEntries(filterEntries(entries));
+  } else if (focusArea === "tray") {
+    return trayItems;
+  } else if (focusArea === "sidebar") {
+    return [...favorites, ...volumes];
+  }
+  return [];
+}
+
+function getSelectedPath() {
+  if (focusArea === "main") return [...selectedPaths][0] || null;
+  if (focusArea === "tray") return [...traySelectedPaths][0] || null;
+  if (focusArea === "sidebar") {
+    const items = getVisibleItems();
+    return sidebarSelectedIndex >= 0 && sidebarSelectedIndex < items.length ? items[sidebarSelectedIndex].path : null;
+  }
+  return null;
+}
+
+function moveSelection(delta) {
+  const items = getVisibleItems();
+  if (items.length === 0) return;
+
+  if (focusArea === "main") {
+    const currentPath = [...selectedPaths][0];
+    let idx = items.findIndex(e => e.path === currentPath);
+    idx = Math.max(0, Math.min(items.length - 1, idx + delta));
+    selectedPaths.clear();
+    selectedPaths.add(items[idx].path);
+    renderCurrentView();
+    renderPreview(items[idx]);
+    // Scroll into view
+    const row = document.querySelector(`.file-row[data-path="${CSS.escape(items[idx].path)}"], .miller-item.selected`);
+    if (row) row.scrollIntoView({ block: "nearest" });
+  } else if (focusArea === "tray") {
+    const currentPath = [...traySelectedPaths][0];
+    let idx = items.findIndex(e => e.path === currentPath);
+    idx = Math.max(0, Math.min(items.length - 1, idx + delta));
+    traySelectedPaths.clear();
+    traySelectedPaths.add(items[idx].path);
+    renderTray();
+    const ext = "." + (items[idx].name.split(".").pop() || "").toLowerCase();
+    renderPreview({ path: items[idx].path, name: items[idx].name, is_dir: items[idx].type === "dir", ext, size: items[idx].size || 0, modified: items[idx].modified || 0 });
+  } else if (focusArea === "sidebar") {
+    sidebarSelectedIndex = Math.max(0, Math.min(items.length - 1, sidebarSelectedIndex + delta));
+    // Highlight sidebar item
+    document.querySelectorAll(".sidebar-item").forEach((el, i) => {
+      el.classList.toggle("active", i === sidebarSelectedIndex);
+    });
+  }
+}
+
+function openSelected() {
+  if (focusArea === "main") {
+    const items = getVisibleItems();
+    const currentPath = [...selectedPaths][0];
+    const entry = items.find(e => e.path === currentPath);
+    if (!entry) return;
+    if (entry.is_dir) navigate(entry.path);
+    else fetch("/api/open?path=" + encodeURIComponent(entry.path));
+  } else if (focusArea === "tray") {
+    const currentPath = [...traySelectedPaths][0];
+    const item = trayItems.find(e => e.path === currentPath);
+    if (!item) return;
+    if (item.type === "dir") navigate(item.path);
+    else fetch("/api/open?path=" + encodeURIComponent(item.path));
+  } else if (focusArea === "sidebar") {
+    const items = getVisibleItems();
+    if (sidebarSelectedIndex >= 0 && sidebarSelectedIndex < items.length) {
+      navigate(items[sidebarSelectedIndex].path);
+    }
+  }
+}
+
+function cycleFocus(reverse) {
+  const areas = ["main", "tray", "sidebar"];
+  let idx = areas.indexOf(focusArea);
+  idx = (idx + (reverse ? -1 : 1) + areas.length) % areas.length;
+  focusArea = areas[idx];
+  trayActive = focusArea === "tray";
+  // Visual feedback
+  document.querySelectorAll(".file-area, .tray-panel, .sidebar").forEach(el => el.style.outline = "");
+  const targets = { main: ".file-area, .column-view:not(.hidden)", tray: ".tray-panel", sidebar: ".sidebar" };
+  const target = document.querySelector(targets[focusArea]);
+  if (target) {
+    target.style.outline = "1px solid var(--accent)";
+    setTimeout(() => target.style.outline = "", 1000);
+  }
+}
+
+// Cheat sheet
+function toggleCheatSheet() {
+  let overlay = document.getElementById("cheatsheet-overlay");
+  if (overlay) { overlay.remove(); return; }
+  overlay = document.createElement("div");
+  overlay.id = "cheatsheet-overlay";
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;display:flex;align-items:center;justify-content:center";
+  overlay.innerHTML = `<div style="background:var(--toolbar-bg);border:1px solid var(--border);border-radius:10px;padding:24px 32px;max-width:480px;color:var(--text);box-shadow:0 8px 32px rgba(0,0,0,0.5)">
+    <h2 style="margin:0 0 16px;font-size:16px">Keyboard Shortcuts</h2>
+    <table style="width:100%;font-size:12px;border-collapse:collapse">
+      <tr><td style="padding:3px 0;color:var(--text-dim)">Navigation</td><td></td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>↓</kbd></td><td>Next item</td></tr>
+      <tr><td><kbd>k</kbd> / <kbd>↑</kbd></td><td>Previous item</td></tr>
+      <tr><td><kbd>o</kbd> / <kbd>Enter</kbd></td><td>Open</td></tr>
+      <tr><td><kbd>Backspace</kbd></td><td>Parent directory</td></tr>
+      <tr><td><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd></td><td>Cycle focus (Main → Tray → Sidebar)</td></tr>
+      <tr><td style="padding:10px 0 3px;color:var(--text-dim)">Actions</td><td></td></tr>
+      <tr><td><kbd>t</kbd></td><td>Add to Tray</td></tr>
+      <tr><td><kbd>Delete</kbd></td><td>Remove from Tray</td></tr>
+      <tr><td><kbd>⌘C</kbd></td><td>Copy path</td></tr>
+      <tr><td><kbd>⌘A</kbd></td><td>Select all</td></tr>
+      <tr><td><kbd>.</kbd></td><td>Toggle hidden files</td></tr>
+      <tr><td><kbd>?</kbd></td><td>This help</td></tr>
+    </table>
+    <div style="margin-top:16px;font-size:11px;color:var(--text-dim);text-align:center">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</div>
+  </div>`;
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+
 document.addEventListener("keydown", (e) => {
-  if (document.activeElement.tagName === "INPUT") return;
+  // Close cheat sheet
+  if ((e.key === "?" || e.key === "Escape") && document.getElementById("cheatsheet-overlay")) {
+    e.preventDefault();
+    toggleCheatSheet();
+    return;
+  }
+
+  if (document.activeElement.tagName === "INPUT") {
+    if (e.key === "Escape") { document.activeElement.blur(); $("#search").value = ""; filterText = ""; renderCurrentView(); }
+    return;
+  }
+
+  // ? — cheat sheet
+  if (e.key === "?") { e.preventDefault(); toggleCheatSheet(); return; }
+
+  // Tab / Shift+Tab — cycle focus
+  if (e.key === "Tab") { e.preventDefault(); cycleFocus(e.shiftKey); return; }
+
+  // j/k or ↑/↓ — move selection
+  if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); return; }
+  if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); return; }
+
+  // o / Enter — open
+  if (e.key === "o" || e.key === "Enter") { e.preventDefault(); openSelected(); return; }
+
+  // / — focus search
+  if (e.key === "/") { e.preventDefault(); $("#search").focus(); return; }
+
+  // . — toggle hidden files
+  if (e.key === ".") { e.preventDefault(); showHidden = !showHidden; $("#btn-hidden").classList.toggle("active", showHidden); renderCurrentView(); return; }
+
+  // Cmd+C — copy path
+  if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+    e.preventDefault();
+    const path = getSelectedPath();
+    if (focusArea === "main" && selectedPaths.size > 1) {
+      navigator.clipboard.writeText([...selectedPaths].join("\n"));
+    } else if (path) {
+      navigator.clipboard.writeText(path);
+    }
+    return;
+  }
+
+  // Cmd+A — select all
+  if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+    e.preventDefault();
+    if (focusArea === "main") {
+      const items = getVisibleItems();
+      selectedPaths.clear();
+      items.forEach(e => selectedPaths.add(e.path));
+      renderCurrentView();
+    }
+    return;
+  }
+
   // T: add selected to tray
   if (e.key === "t" || e.key === "T") {
     e.preventDefault();
@@ -1518,6 +1709,7 @@ document.addEventListener("keydown", (e) => {
     if (selected.length > 0) addToTray(selected);
     return;
   }
+
   // Delete/Backspace in tray
   if ((e.key === "Delete" || e.key === "Backspace") && trayActive && traySelectedPaths.size > 0) {
     e.preventDefault();
@@ -1790,6 +1982,7 @@ function renderTray() {
 
     el.onclick = (e) => {
       trayActive = true;
+      focusArea = "tray";
       selectedPaths.clear();
       if (e.metaKey || e.ctrlKey) {
         if (traySelectedPaths.has(item.path)) traySelectedPaths.delete(item.path);
