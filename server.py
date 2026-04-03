@@ -47,6 +47,41 @@ if let jsonData = try? JSONSerialization.data(withJSONObject: results, options: 
 }
 """
 
+SWIFT_ICON_CODE = r"""
+import Cocoa
+
+guard CommandLine.arguments.count > 2 else {
+    fputs("Usage: icon <path> <output.png>\n", stderr)
+    exit(1)
+}
+
+let path = CommandLine.arguments[1]
+let output = CommandLine.arguments[2]
+
+let ws = NSWorkspace.shared
+let icon = ws.icon(forFile: path)
+
+// Get 128x128 representation
+let size = NSSize(width: 128, height: 128)
+icon.size = size
+
+guard let tiff = icon.tiffRepresentation,
+      let rep = NSBitmapImageRep(data: tiff),
+      let png = rep.representation(using: .png, properties: [:]) else {
+    exit(1)
+}
+
+let url = URL(fileURLWithPath: output)
+try! png.write(to: url)
+"""
+
+# macOS bundle extensions that should be treated as files, not folders
+BUNDLE_EXTS = {
+    ".app", ".framework", ".bundle", ".plugin", ".kext",
+    ".xcodeproj", ".xcworkspace", ".playground",
+    ".prefPane", ".screensaver", ".pkg", ".mpkg", ".rtfd",
+}
+
 def _get_swift_binary():
     """Compile and cache the Swift favorites reader binary."""
     cache_dir = os.path.join(tempfile.gettempdir(), "wls_cache")
@@ -65,6 +100,28 @@ def _get_swift_binary():
             check=True, capture_output=True,
         )
     return binary_path
+
+def _get_icon_binary():
+    """Compile and cache the Swift icon extractor binary."""
+    cache_dir = os.path.join(tempfile.gettempdir(), "wls_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+
+    code_hash = hashlib.md5(SWIFT_ICON_CODE.encode()).hexdigest()[:12]
+    binary_path = os.path.join(cache_dir, f"icon_{code_hash}")
+
+    if not os.path.exists(binary_path):
+        swift_src = os.path.join(cache_dir, "icon.swift")
+        with open(swift_src, "w") as f:
+            f.write(SWIFT_ICON_CODE)
+        subprocess.run(
+            ["swiftc", "-O", "-framework", "Cocoa", "-suppress-warnings",
+             swift_src, "-o", binary_path],
+            check=True, capture_output=True,
+        )
+    return binary_path
+
+# Cache for icon PNGs: path -> png_path
+_icon_cache = {}
 
 class FinderHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
@@ -197,6 +254,10 @@ class FinderHandler(SimpleHTTPRequestHandler):
             params = urllib.parse.parse_qs(parsed.query)
             filepath = params.get("path", [""])[0]
             self.open_file(filepath)
+        elif parsed.path == "/api/icon":
+            params = urllib.parse.parse_qs(parsed.query)
+            filepath = params.get("path", [""])[0]
+            self.serve_app_icon(filepath)
         elif parsed.path == "/icon.png":
             icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")
             self.serve_file(icon_path)
@@ -222,16 +283,20 @@ class FinderHandler(SimpleHTTPRequestHandler):
                     stat = os.stat(full)
                     is_dir = os.path.isdir(full)
                     # Get file extension
-                    ext = os.path.splitext(name)[1].lower() if not is_dir else ""
-                    entries.append({
+                    ext = os.path.splitext(name)[1].lower()
+                    is_bundle = is_dir and ext in BUNDLE_EXTS
+                    entry = {
                         "name": name,
                         "path": full,
-                        "is_dir": is_dir,
+                        "is_dir": is_dir and not is_bundle,
                         "size": stat.st_size,
                         "modified": stat.st_mtime,
                         "ext": ext,
                         "hidden": name.startswith("."),
-                    })
+                    }
+                    if is_bundle:
+                        entry["is_bundle"] = True
+                    entries.append(entry)
                 except (PermissionError, OSError):
                     continue
 
@@ -311,6 +376,37 @@ class FinderHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(chunk)
         except PermissionError:
             self.send_error(403, "Permission denied")
+        except Exception as e:
+            self.send_error(500, str(e))
+
+    def serve_app_icon(self, filepath):
+        """Get the macOS icon for a file/app as PNG."""
+        filepath = os.path.abspath(filepath)
+        if not os.path.exists(filepath):
+            self.send_error(404, "Not found")
+            return
+        try:
+            # Check cache
+            if filepath in _icon_cache and os.path.exists(_icon_cache[filepath]):
+                self.serve_file(_icon_cache[filepath])
+                return
+
+            cache_dir = os.path.join(tempfile.gettempdir(), "wls_cache", "icons")
+            os.makedirs(cache_dir, exist_ok=True)
+
+            # Use path hash for cache filename
+            path_hash = hashlib.md5(filepath.encode()).hexdigest()[:16]
+            png_path = os.path.join(cache_dir, f"{path_hash}.png")
+
+            if not os.path.exists(png_path):
+                binary = _get_icon_binary()
+                subprocess.run(
+                    [binary, filepath, png_path],
+                    check=True, capture_output=True, timeout=5,
+                )
+
+            _icon_cache[filepath] = png_path
+            self.serve_file(png_path)
         except Exception as e:
             self.send_error(500, str(e))
 

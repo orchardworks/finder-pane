@@ -902,7 +902,28 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
 // Icon mapping
+const BUNDLE_HIDE_EXT = new Set([".app"]);
+
+function displayName(entry) {
+  if (entry.is_bundle && BUNDLE_HIDE_EXT.has(entry.ext)) {
+    return entry.name.slice(0, -entry.ext.length);
+  }
+  return entry.name;
+}
+
 function getIcon(entry) {
+  if (entry.is_bundle) {
+    const bundleIcons = {
+      ".app": "📦", ".framework": "🧩", ".bundle": "🔌", ".plugin": "🔌",
+      ".xcodeproj": "🔨", ".xcworkspace": "🔨", ".playground": "▶️",
+      ".prefPane": "⚙️", ".pkg": "📀", ".mpkg": "📀", ".rtfd": "📝",
+    };
+    const fallback = bundleIcons[entry.ext] || "📦";
+    if (entry.ext === ".app") {
+      return `<span class="app-icon-lazy" data-app-path="${escHtml(entry.path)}">${fallback}</span>`;
+    }
+    return fallback;
+  }
   if (entry.is_dir) return "📁";
   const ext = entry.ext;
   const icons = {
@@ -973,7 +994,7 @@ async function loadFavorites() {
     favorites.unshift({ name: "Home", path: home, icon: "🏠" });
   }
   if (!favorites.find(f => f.path === "/")) {
-    favorites.push({ name: "Root", path: "/", icon: "💽" });
+    favorites.push({ name: "/ (Root)", path: "/", icon: "📁" });
   }
   // Load volumes
   try {
@@ -1041,7 +1062,8 @@ function renderSidebar() {
     for (const vol of volumes) {
       const el = document.createElement("div");
       el.className = "sidebar-item" + (currentDir.replace(/\/$/, "") === vol.path.replace(/\/$/, "") ? " active" : "");
-      el.innerHTML = `<span class="sidebar-icon">💾</span>${escHtml(vol.name)}`;
+      const volIcon = vol.name === "Macintosh HD" ? "\uF8FF" : "🗄️";
+      el.innerHTML = `<span class="sidebar-icon">${volIcon}</span>${escHtml(vol.name)}`;
       el.onclick = () => navigate(vol.path);
       makeSidebarDropTarget(el, vol.path);
       makeSidebarContextMenu(el, vol.path);
@@ -1426,7 +1448,7 @@ function renderFiles() {
       <div class="file-name" style="padding-left: ${indent}px">
         <span class="${toggleCls}">▶</span>
         <span class="file-icon">${getIcon(entry)}</span>
-        <span>${escHtml(entry.name)}</span>
+        <span>${escHtml(displayName(entry))}</span>
       </div>
       <div class="file-size">${entry.is_dir ? "—" : formatSize(entry.size)}</div>
       <div class="file-date">${formatDate(entry.modified)}</div>
@@ -1517,6 +1539,26 @@ function renderFiles() {
   }
 
   updateStatusbar();
+  lazyLoadAppIcons();
+}
+
+// Lazy-load .app icons via IntersectionObserver
+const _appIconObserver = new IntersectionObserver((entries) => {
+  for (const ioEntry of entries) {
+    if (!ioEntry.isIntersecting) continue;
+    const el = ioEntry.target;
+    const appPath = el.dataset.appPath;
+    if (!appPath) continue;
+    _appIconObserver.unobserve(el);
+    const img = new Image(16, 16);
+    img.src = "/api/icon?path=" + encodeURIComponent(appPath);
+    img.style.verticalAlign = "middle";
+    img.onload = () => { el.textContent = ""; el.appendChild(img); };
+  }
+}, { rootMargin: "200px" });
+
+function lazyLoadAppIcons() {
+  document.querySelectorAll(".app-icon-lazy").forEach(el => _appIconObserver.observe(el));
 }
 
 function updateStatusbar() {
@@ -1552,7 +1594,7 @@ async function renderColumnView() {
       item.className = "miller-item" + (col.selected === entry.path ? " selected" : "");
       item.innerHTML = `
         <span class="file-icon">${getIcon(entry)}</span>
-        <span class="miller-item-name">${escHtml(entry.name)}</span>
+        <span class="miller-item-name">${escHtml(displayName(entry))}</span>
         ${entry.is_dir ? '<span class="miller-item-arrow">▶</span>' : ""}
       `;
       item.onclick = async () => {
@@ -1628,6 +1670,7 @@ async function renderColumnView() {
   // Auto scroll right
   container.scrollLeft = container.scrollWidth;
   updateStatusbar();
+  lazyLoadAppIcons();
 }
 
 function switchView(mode) {
