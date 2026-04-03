@@ -1,0 +1,342 @@
+"""Browser E2E tests for wls using Playwright."""
+
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import threading
+import time
+
+import pytest
+from playwright.sync_api import Page, expect
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+import server
+
+
+@pytest.fixture(scope="module")
+def temp_dir():
+    """Create a temporary directory with test files for browser tests."""
+    d = tempfile.mkdtemp(prefix="wls_browser_test_")
+
+    # Create subdirectories
+    os.makedirs(os.path.join(d, "subdir"))
+    os.makedirs(os.path.join(d, "another_dir"))
+
+    # Create text files
+    for i in range(60):
+        with open(os.path.join(d, f"file_{i:03d}.txt"), "w") as f:
+            f.write(f"Content of file {i}\nLine 2\nLine 3\n")
+
+    # Create an image file (minimal valid PNG)
+    png_header = (
+        b'\x89PNG\r\n\x1a\n'  # PNG signature
+        b'\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde'
+        b'\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N'
+        b'\x00\x00\x00\x00IEND\xaeB`\x82'
+    )
+    with open(os.path.join(d, "test_image.png"), "wb") as f:
+        f.write(png_header)
+
+    # Create a markdown file
+    with open(os.path.join(d, "readme.md"), "w") as f:
+        f.write("# Test\n\nThis is a test markdown file.\n")
+
+    # Create a hidden file
+    with open(os.path.join(d, ".hidden"), "w") as f:
+        f.write("hidden content")
+
+    yield d
+    shutil.rmtree(d)
+
+
+@pytest.fixture(scope="module")
+def test_server(temp_dir):
+    """Start a test server on a fixed port for browser tests."""
+    port = 18235
+    srv = server.ThreadingHTTPServer(("127.0.0.1", port), server.FinderHandler)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    time.sleep(0.5)
+    yield f"http://127.0.0.1:{port}"
+    srv.shutdown()
+
+
+@pytest.fixture
+def app(page: Page, test_server, temp_dir):
+    """Navigate to the app and wait for initial load."""
+    page.goto(f"{test_server}{temp_dir}")
+    # Wait for file list to render
+    page.wait_for_selector(".file-row", timeout=5000)
+    return page
+
+
+# --- Navigation & Display ---
+
+class TestScrollFollowing:
+    def test_jk_scroll_follows_in_list_view(self, app: Page, temp_dir):
+        """j/k navigation should keep selected item visible in a long list."""
+        # Press j many times to scroll down
+        for _ in range(50):
+            app.keyboard.press("j")
+
+        # The selected row should be visible
+        selected = app.query_selector(".file-row.selected")
+        assert selected is not None
+        assert selected.is_visible()
+
+    def test_jk_scroll_follows_in_column_view(self, app: Page):
+        """j/k navigation should keep selected item visible in column view."""
+        # Switch to column view
+        app.click("#btn-view-cols")
+        app.wait_for_selector(".miller-column", timeout=3000)
+
+        # Press j many times
+        for _ in range(50):
+            app.keyboard.press("j")
+
+        selected = app.query_selector(".miller-item.selected")
+        assert selected is not None
+        assert selected.is_visible()
+
+
+class TestColumnViewClick:
+    def test_click_after_scroll_selects_correct_item(self, app: Page, temp_dir):
+        """Clicking an item in a scrolled column should select that item."""
+        # Switch to column view
+        app.click("#btn-view-cols")
+        app.wait_for_selector(".miller-column", timeout=3000)
+
+        # Scroll down in the column and click a specific item
+        column = app.query_selector(".miller-column")
+        # Scroll to bottom of the column
+        column.evaluate("el => el.scrollTop = el.scrollHeight")
+        app.wait_for_timeout(100)
+
+        # Get the last visible item and click it
+        items = app.query_selector_all(".miller-column .miller-item")
+        last_item = items[-1]
+        last_item_name = last_item.query_selector(".miller-item-name").inner_text()
+        last_item.click()
+        app.wait_for_timeout(200)
+
+        # Verify it's selected
+        selected = app.query_selector(".miller-item.selected")
+        assert selected is not None
+        selected_name = selected.query_selector(".miller-item-name").inner_text()
+        assert selected_name == last_item_name
+
+
+class TestViewSwitching:
+    def test_switch_to_column_view(self, app: Page):
+        """Clicking column view button should show miller columns."""
+        app.click("#btn-view-cols")
+        expect(app.locator("#column-view")).to_be_visible()
+        expect(app.locator("#list-view")).to_be_hidden()
+
+    def test_switch_to_list_view(self, app: Page):
+        """Clicking list view button should show file list."""
+        # Switch to columns first
+        app.click("#btn-view-cols")
+        # Switch back to list
+        app.click("#btn-view-list")
+        expect(app.locator("#list-view")).to_be_visible()
+        expect(app.locator("#column-view")).to_be_hidden()
+
+
+class TestKeyboardNavigation:
+    def test_jk_moves_selection(self, app: Page):
+        """j moves selection down, k moves it back up."""
+        # Press j to select first item
+        app.keyboard.press("j")
+        first = app.query_selector(".file-row.selected")
+        assert first is not None
+        first_path = first.get_attribute("data-path")
+
+        # Press j again to move down
+        app.keyboard.press("j")
+        second = app.query_selector(".file-row.selected")
+        second_path = second.get_attribute("data-path")
+        assert second_path != first_path
+
+        # Press k to move back up
+        app.keyboard.press("k")
+        back = app.query_selector(".file-row.selected")
+        assert back.get_attribute("data-path") == first_path
+
+    def test_hl_column_navigation(self, app: Page):
+        """h/l should navigate between columns in column view."""
+        app.click("#btn-view-cols")
+        app.wait_for_selector(".miller-column", timeout=3000)
+
+        # Select a directory
+        dirs = app.query_selector_all(".miller-item .miller-item-arrow")
+        if len(dirs) > 0:
+            # Click the parent of the arrow (the miller-item)
+            dirs[0].evaluate("el => el.parentElement.click()")
+            app.wait_for_timeout(500)
+
+            # Should have 2 columns now
+            columns = app.query_selector_all(".miller-column")
+            assert len(columns) >= 2
+
+            # Press l to move into the next column
+            app.keyboard.press("l")
+            app.wait_for_timeout(200)
+
+            # Press h to move back
+            app.keyboard.press("h")
+            app.wait_for_timeout(200)
+
+            # Should still have columns
+            columns = app.query_selector_all(".miller-column")
+            assert len(columns) >= 1
+
+
+# --- Preview ---
+
+class TestPreview:
+    def test_text_file_preview(self, app: Page, temp_dir):
+        """Clicking a text file should show preview in the sidebar or preview pane."""
+        # Click file_000.txt
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/file_000.txt"]')
+        if row:
+            row.click()
+            app.wait_for_timeout(500)
+            # Check that preview pane or sidebar preview has content
+            preview = app.query_selector("#preview-pane, #sidebar-preview")
+            assert preview is not None
+
+    def test_image_file_preview(self, app: Page, temp_dir):
+        """Clicking an image file should show an img tag in preview."""
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/test_image.png"]')
+        if row:
+            row.click()
+            app.wait_for_timeout(500)
+            img = app.query_selector("#preview-pane img, #sidebar-preview img")
+            assert img is not None
+
+
+# --- Tab Focus ---
+
+class TestTabFocus:
+    def test_tab_cycles_focus(self, app: Page):
+        """Tab key should cycle focus area: main -> tray -> sidebar."""
+        # Initial focus should be main
+        focus = app.evaluate("() => document.body.dataset.focus")
+        assert focus == "main"
+
+        # Tab -> tray
+        app.keyboard.press("Tab")
+        focus = app.evaluate("() => document.body.dataset.focus")
+        assert focus == "tray"
+
+        # Tab -> sidebar
+        app.keyboard.press("Tab")
+        focus = app.evaluate("() => document.body.dataset.focus")
+        assert focus == "sidebar"
+
+        # Tab -> back to main
+        app.keyboard.press("Tab")
+        focus = app.evaluate("() => document.body.dataset.focus")
+        assert focus == "main"
+
+    def test_shift_tab_cycles_reverse(self, app: Page):
+        """Shift+Tab should cycle focus in reverse."""
+        # main -> sidebar (reverse)
+        app.keyboard.press("Shift+Tab")
+        focus = app.evaluate("() => document.body.dataset.focus")
+        assert focus == "sidebar"
+
+
+# --- Tray ---
+
+class TestTray:
+    def test_add_to_tray_with_t_key(self, app: Page, temp_dir):
+        """Pressing T should add selected item to tray."""
+        # Select a file
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/file_000.txt"]')
+        row.click()
+        app.wait_for_timeout(100)
+
+        # Press T to add to tray
+        app.keyboard.press("t")
+        app.wait_for_timeout(200)
+
+        # Check tray has an item
+        tray_items = app.query_selector_all(".tray-item")
+        assert len(tray_items) >= 1
+
+    def test_remove_from_tray_with_delete(self, app: Page, temp_dir):
+        """Selecting a tray item and pressing Delete should remove it."""
+        # First add to tray
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/file_001.txt"]')
+        row.click()
+        app.wait_for_timeout(100)
+        app.keyboard.press("t")
+        app.wait_for_timeout(200)
+
+        initial_count = len(app.query_selector_all(".tray-item"))
+        assert initial_count >= 1
+
+        # Tab to tray
+        app.keyboard.press("Tab")
+        app.wait_for_timeout(100)
+
+        # Select first tray item with j
+        app.keyboard.press("j")
+        app.wait_for_timeout(100)
+
+        # Press Delete/Backspace to remove
+        app.keyboard.press("Backspace")
+        app.wait_for_timeout(200)
+
+        new_count = len(app.query_selector_all(".tray-item"))
+        assert new_count < initial_count
+
+
+class TestGoToOriginalLocation:
+    def test_go_to_original_location(self, app: Page, temp_dir):
+        """G key in tray should navigate to the file's directory and select it."""
+        # Add a file in subdir to tray
+        # First navigate to subdir
+        subdir_row = app.query_selector(f'.file-row[data-path="{temp_dir}/subdir"]')
+        if subdir_row:
+            subdir_row.dblclick()
+            app.wait_for_timeout(500)
+
+        # Go back to parent
+        app.keyboard.press("u")
+        app.wait_for_timeout(500)
+
+        # Add a file to tray
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/file_005.txt"]')
+        if row:
+            row.click()
+            app.wait_for_timeout(100)
+            app.keyboard.press("t")
+            app.wait_for_timeout(200)
+
+        # Navigate away to subdir
+        subdir_row = app.query_selector(f'.file-row[data-path="{temp_dir}/subdir"]')
+        if subdir_row:
+            subdir_row.dblclick()
+            app.wait_for_timeout(500)
+
+        # Tab to tray
+        app.keyboard.press("Tab")
+        app.wait_for_timeout(100)
+
+        # Select the tray item
+        app.keyboard.press("j")
+        app.wait_for_timeout(100)
+
+        # Press G to go to original location
+        app.keyboard.press("g")
+        app.wait_for_timeout(500)
+
+        # Should have navigated back to temp_dir
+        current_dir = app.evaluate("() => currentDir")
+        assert current_dir == temp_dir

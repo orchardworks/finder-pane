@@ -1698,10 +1698,10 @@ async function renderColumnView(preserveScroll = false) {
         }
         selectedPaths.clear();
         selectedPaths.add(entry.path);
-        renderColumnView();
+        renderColumnView(true);
         renderPreview(entry);
-        // Scroll to show rightmost column
-        container.scrollLeft = container.scrollWidth;
+        // If a new column was added (dir click), scroll right to show it
+        if (entry.is_dir) container.scrollLeft = container.scrollWidth;
       };
       item.ondblclick = () => {
         if (entry.is_dir) {
