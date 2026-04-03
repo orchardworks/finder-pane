@@ -1729,6 +1729,7 @@ async function navigate(dir, pushHistory = true, selectPath = null) {
     updateNav();
     renderSidebar();
     renderBreadcrumb();
+    document.title = (currentDir.split("/").pop() || "/") + " — wls";
     if (viewMode === "columns") {
       columnData = [{ dir: currentDir, entries: entries, selected: selectPath || null }]; activeColumnIndex = 0;
       renderColumnView();
@@ -2302,7 +2303,7 @@ function showContextMenu(e, entry) {
   if (!selectedPaths.has(entry.path)) {
     selectedPaths.clear();
     selectedPaths.add(entry.path);
-    renderFiles();
+    renderCurrentView();
   }
   contextEntry = entry;
   ctxMenu.classList.remove("hidden");
@@ -2672,10 +2673,17 @@ for (const el of [trayPanel, trayItemsEl]) {
     if (e.dataTransfer.getData("text/x-wls-source") === "tray") return; // don't re-add from tray
     const paths = JSON.parse(e.dataTransfer.getData("application/json") || "[]");
     const toAdd = paths.map(p => {
-      const found = entries.find(en => en.path === p);
+      let found = entries.find(en => en.path === p);
+      if (!found) {
+        for (const col of columnData) {
+          found = col.entries.find(en => en.path === p);
+          if (found) break;
+        }
+      }
       if (found) return found;
+      // Fallback: check filesystem via path (is_dir unknown, default to file)
       const name = p.split("/").pop();
-      return { path: p, name, is_dir: !name.includes(".") };
+      return { path: p, name, is_dir: false };
     });
     addToTray(toAdd);
   });

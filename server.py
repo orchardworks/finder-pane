@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.parse
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 try:
@@ -151,9 +151,11 @@ class FinderHandler(SimpleHTTPRequestHandler):
             return
         try:
             # Use macOS 'trash' via osascript for proper Trash behavior
+            # Escape backslashes and double quotes to prevent injection
+            safe_path = filepath.replace("\\", "\\\\").replace('"', '\\"')
             subprocess.run(
                 ["osascript", "-e",
-                 f'tell application "Finder" to delete POSIX file "{filepath}"'],
+                 f'tell application "Finder" to delete POSIX file "{safe_path}"'],
                 check=True, capture_output=True, timeout=5,
             )
             self._json_response({"ok": True})
@@ -436,6 +438,6 @@ class FinderHandler(SimpleHTTPRequestHandler):
         pass  # suppress logs
 
 if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", PORT), FinderHandler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), FinderHandler)
     print(f"Finder browser: http://127.0.0.1:{PORT}")
     server.serve_forever()
