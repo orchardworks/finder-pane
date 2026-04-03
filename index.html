@@ -91,6 +91,7 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+    min-height: 0;
   }
 
   /* Sidebar */
@@ -155,6 +156,9 @@
   }
   .sidebar-item:hover { background: var(--hover); }
   .sidebar-item.active { background: var(--selected); }
+  /* Dim selection in unfocused areas */
+  body[data-focus="main"] .sidebar-item.active,
+  body[data-focus="tray"] .sidebar-item.active { background: transparent; }
   .sidebar-icon { font-size: 15px; width: 20px; text-align: center; }
 
   /* Sidebar preview (fallback when right preview pane is hidden) */
@@ -164,6 +168,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    position: relative;
   }
   .sidebar-preview:empty { display: none; }
   .sidebar-preview img, .sidebar-preview video {
@@ -175,6 +180,35 @@
   .sidebar-preview .preview-icon { font-size: 40px; margin-bottom: 6px; }
   .sidebar-preview .preview-name { font-weight: 600; word-break: break-all; }
   .sidebar-preview .preview-meta { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+  .sidebar-preview iframe {
+    width: 100%;
+    flex: 1;
+    min-height: 300px;
+    border: none;
+  }
+  .sidebar-preview .preview-code,
+  .sidebar-preview .preview-markdown {
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+  }
+  .sidebar-preview .sbp-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: var(--toolbar-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    padding: 3px 6px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 5;
+  }
+  .sidebar-preview:hover .sbp-copy-btn { opacity: 1; }
+  .sidebar-preview .sbp-copy-btn:hover { color: var(--text); background: var(--hover); }
 
   /* Content area (right of sidebar: file area + tray) */
   .content-area {
@@ -183,6 +217,7 @@
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
+    min-height: 0;
   }
 
   /* File area wrapper */
@@ -231,6 +266,8 @@
   }
   .file-row:hover { background: var(--hover); }
   .file-row.selected { background: var(--selected); }
+  body[data-focus="tray"] .file-row.selected,
+  body[data-focus="sidebar"] .file-row.selected { background: var(--hover); }
   .file-row.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(0,120,212,0.15); }
   .file-row.dragging { opacity: 0.4; }
   .sidebar-item.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(0,120,212,0.15); }
@@ -272,9 +309,10 @@
   .statusbar {
     padding: 4px 14px;
     font-size: 11px;
-    color: var(--text-dim);
+    color: var(--text);
     border-top: 1px solid var(--border);
     background: var(--toolbar-bg);
+    flex-shrink: 0;
   }
 
   /* Preview pane */
@@ -446,6 +484,8 @@
   }
   .miller-item:hover { background: var(--hover); }
   .miller-item.selected { background: var(--selected); }
+  body[data-focus="tray"] .miller-item.selected,
+  body[data-focus="sidebar"] .miller-item.selected { background: var(--hover); }
   .miller-item .file-icon { font-size: 14px; flex-shrink: 0; }
   .miller-item-name {
     flex: 1;
@@ -475,13 +515,105 @@
     padding: 5px 14px;
     cursor: pointer;
     font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
   }
   .context-menu-item:hover { background: var(--selected); }
   .context-menu-item.danger { color: #f44; }
+  .context-menu-shortcut {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
   .context-menu-sep {
     height: 1px;
     background: var(--border);
     margin: 4px 0;
+  }
+
+  /* Quick Look overlay */
+  .quicklook-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+  }
+  .quicklook-panel {
+    background: var(--toolbar-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    max-width: 90vw;
+    max-height: 85vh;
+    min-width: 400px;
+    min-height: 300px;
+    overflow: hidden;
+  }
+  .quicklook-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .quicklook-header .ql-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .quicklook-header .ql-close:hover { color: var(--text); }
+  .quicklook-body {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .quicklook-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .quicklook-body video {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .quicklook-body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+  .quicklook-body .preview-code,
+  .quicklook-body .preview-markdown {
+    padding: 16px;
+    overflow: auto;
+    width: 100%;
+    height: 100%;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .quicklook-footer {
+    padding: 6px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    text-align: center;
   }
 
   /* Inline rename input */
@@ -564,6 +696,8 @@
   }
   .tray-item:hover { background: var(--hover); }
   .tray-item.selected { background: var(--accent); color: #fff; }
+  body[data-focus="main"] .tray-item.selected,
+  body[data-focus="sidebar"] .tray-item.selected { background: var(--hover); color: var(--text); }
   .tray-item .tray-path {
     font-size: 10px;
     color: var(--text-dim);
@@ -574,6 +708,8 @@
     max-width: 200px;
   }
   .tray-item.selected .tray-path { color: rgba(255,255,255,0.7); }
+  body[data-focus="main"] .tray-item.selected .tray-path,
+  body[data-focus="sidebar"] .tray-item.selected .tray-path { color: var(--text-dim); }
   .tray-empty {
     color: var(--text);
     opacity: 0.6;
@@ -715,25 +851,25 @@
 
 <div class="statusbar" id="statusbar"></div>
 <div class="context-menu hidden" id="context-menu">
-  <div class="context-menu-item" data-action="open">Open</div>
-  <div class="context-menu-item" data-action="open-in-finder">Open in Finder</div>
-  <div class="context-menu-item" data-action="add-to-tray">Add to Tray</div>
-  <div class="context-menu-item" data-action="copy-path">Copy Path</div>
-  <div class="context-menu-item" data-action="rename">Rename</div>
+  <div class="context-menu-item" data-action="open">Open<span class="context-menu-shortcut">O</span></div>
+  <div class="context-menu-item" data-action="open-in-finder">Open in Finder<span class="context-menu-shortcut">F</span></div>
+  <div class="context-menu-item" data-action="add-to-tray">Add to Tray<span class="context-menu-shortcut">T</span></div>
+  <div class="context-menu-item" data-action="copy-path">Copy Path<span class="context-menu-shortcut">⌘+C</span></div>
+  <div class="context-menu-item" data-action="rename">Rename<span class="context-menu-shortcut">R</span></div>
   <div class="context-menu-sep"></div>
-  <div class="context-menu-item danger" data-action="trash">Move to Trash</div>
+  <div class="context-menu-item danger" data-action="trash">Move to Trash<span class="context-menu-shortcut">⌘+⌫</span></div>
 </div>
 <div class="context-menu hidden" id="tray-context-menu">
-  <div class="context-menu-item" data-action="tray-open">Open</div>
-  <div class="context-menu-item" data-action="tray-open-in-finder">Open in Finder</div>
-  <div class="context-menu-item" data-action="tray-goto">Go to Original Location</div>
-  <div class="context-menu-item" data-action="tray-copy-path">Copy Path</div>
+  <div class="context-menu-item" data-action="tray-open">Open<span class="context-menu-shortcut">O</span></div>
+  <div class="context-menu-item" data-action="tray-open-in-finder">Open in Finder<span class="context-menu-shortcut">F</span></div>
+  <div class="context-menu-item" data-action="tray-goto">Go to Original Location<span class="context-menu-shortcut">G</span></div>
+  <div class="context-menu-item" data-action="tray-copy-path">Copy Path<span class="context-menu-shortcut">⌘+C</span></div>
   <div class="context-menu-sep"></div>
-  <div class="context-menu-item" data-action="tray-remove">Remove from Tray</div>
+  <div class="context-menu-item" data-action="tray-remove">Remove from Tray<span class="context-menu-shortcut">⌫</span></div>
 </div>
 <div class="context-menu hidden" id="sidebar-context-menu">
-  <div class="context-menu-item" data-action="sidebar-open-in-finder">Open in Finder</div>
-  <div class="context-menu-item" data-action="sidebar-copy-path">Copy Path</div>
+  <div class="context-menu-item" data-action="sidebar-open-in-finder">Open in Finder<span class="context-menu-shortcut">F</span></div>
+  <div class="context-menu-item" data-action="sidebar-copy-path">Copy Path<span class="context-menu-shortcut">⌘+C</span></div>
 </div>
 
 <script>
@@ -759,6 +895,7 @@ let trayActive = false; // true when tray has focus
 
 // Focus area: "main" | "tray" | "sidebar"
 let focusArea = "main";
+document.body.dataset.focus = "main";
 let sidebarSelectedIndex = -1;
 
 const $ = (s) => document.querySelector(s);
@@ -1070,16 +1207,59 @@ function setPreviewContent(html) {
   while (content.firstChild) pane.appendChild(content.firstChild);
 }
 
-function renderSidebarPreview(entry) {
+async function renderSidebarPreview(entry) {
   const sbp = document.getElementById("sidebar-preview");
   if (!sbp) return;
   if (!entry) { sbp.innerHTML = ""; return; }
   const ext = entry.ext;
   const fileUrl = encodeURI(entry.path);
+  let _sbpRawText = null;
+  function sbpCopyBtn() {
+    return `<button class="sbp-copy-btn" title="Copy">📋</button>`;
+  }
+  function sbpBindCopy() {
+    const btn = sbp.querySelector(".sbp-copy-btn");
+    if (btn && _sbpRawText !== null) {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        await navigator.clipboard.writeText(_sbpRawText);
+        btn.textContent = "✓";
+        setTimeout(() => btn.textContent = "📋", 1200);
+      };
+    }
+  }
   if (IMAGE_EXTS.has(ext)) {
     sbp.innerHTML = `<img src="${fileUrl}" alt="${escHtml(entry.name)}">`;
   } else if (VIDEO_EXTS.has(ext)) {
     sbp.innerHTML = `<video src="${fileUrl}" controls muted style="max-width:100%"></video>`;
+  } else if (ext === ".pdf") {
+    sbp.innerHTML = `<iframe src="${fileUrl}#toolbar=0" style="width:100%;flex:1;border:none"></iframe>`;
+  } else if (ext === ".html" || ext === ".htm") {
+    sbp.innerHTML = `<iframe src="${fileUrl}" sandbox="allow-same-origin" style="width:100%;flex:1;border:none;background:#fff"></iframe>`;
+  } else if (MD_EXTS.has(ext)) {
+    try {
+      const res = await fetch(fileUrl);
+      const text = await res.text();
+      _sbpRawText = text;
+      sbp.innerHTML = `${sbpCopyBtn()}<div class="preview-markdown" style="padding:8px;overflow:auto;flex:1">${renderMarkdown(text)}</div>`;
+      sbpBindCopy();
+    } catch { sbp.innerHTML = ""; }
+  } else if (ext === ".json") {
+    try {
+      const res = await fetch(fileUrl);
+      const text = await res.text();
+      _sbpRawText = text;
+      sbp.innerHTML = `${sbpCopyBtn()}<div class="preview-code" style="padding:4px 0;overflow:auto;flex:1;font-size:11px">${addLineNumbers(highlightJson(text))}</div>`;
+      sbpBindCopy();
+    } catch { sbp.innerHTML = ""; }
+  } else if (CODE_EXTS.has(ext)) {
+    try {
+      const res = await fetch(fileUrl);
+      const text = await res.text();
+      _sbpRawText = text;
+      sbp.innerHTML = `${sbpCopyBtn()}<div class="preview-code" style="padding:4px 0;overflow:auto;flex:1;font-size:11px">${addLineNumbers(highlightCode(text, ext))}</div>`;
+      sbpBindCopy();
+    } catch { sbp.innerHTML = ""; }
   } else {
     sbp.innerHTML = `<div class="preview-info">
       <div class="preview-icon">${getIcon(entry)}</div>
@@ -1146,6 +1326,8 @@ async function renderPreview(entry) {
     setPreviewContent(`<img src="${fileUrl}" alt="${escHtml(entry.name)}">`);
   } else if (VIDEO_EXTS.has(ext)) {
     setPreviewContent(`<video src="${fileUrl}" controls autoplay muted></video>`);
+  } else if (ext === ".pdf") {
+    setPreviewContent(`<iframe src="${fileUrl}#toolbar=0" style="width:100%;flex:1;border:none"></iframe>`);
   } else if (ext === ".html" || ext === ".htm") {
     setPreviewContent(`<iframe src="${fileUrl}" sandbox="allow-same-origin"></iframe>`);
   } else if (MD_EXTS.has(ext)) {
@@ -1256,8 +1438,7 @@ function renderFiles() {
     };
     row.oncontextmenu = (e) => showContextMenu(e, entry);
     row.onclick = (e) => {
-      trayActive = false;
-      focusArea = "main";
+      setFocusArea("main");
       traySelectedPaths.clear();
       if (e.metaKey || e.ctrlKey) {
         // Cmd/Ctrl+click: toggle individual
@@ -1335,12 +1516,16 @@ function renderFiles() {
     container.appendChild(row);
   }
 
+  updateStatusbar();
+}
+
+function updateStatusbar() {
   const topList = sortEntries(filterEntries(entries));
   const dirs = topList.filter(e => e.is_dir).length;
   const files = topList.filter(e => !e.is_dir).length;
   let status = `${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
   if (selectedPaths.size > 1) status += ` — ${selectedPaths.size} selected`;
-  $("#statusbar").innerHTML = `${status}<span id="shortcut-hint" style="float:right;opacity:0.5;cursor:pointer" title="Show keyboard shortcuts"><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 3px;font-size:10px">?</kbd> Shortcuts</span>`;
+  $("#statusbar").innerHTML = `${status}<span id="shortcut-hint" style="float:right;opacity:0.9;cursor:pointer" title="Show keyboard shortcuts"><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 3px;font-size:10px">?</kbd> Shortcuts</span>`;
   $("#shortcut-hint").onclick = (e) => { e.stopPropagation(); toggleCheatSheet(); };
 }
 
@@ -1353,7 +1538,7 @@ async function renderColumnView() {
 
   // Init first column from current directory entries
   if (columnData.length === 0) {
-    columnData = [{ dir: currentDir, entries: entries, selected: null }];
+    columnData = [{ dir: currentDir, entries: entries, selected: null }]; activeColumnIndex = 0;
   }
 
   for (let ci = 0; ci < columnData.length; ci++) {
@@ -1371,9 +1556,9 @@ async function renderColumnView() {
         ${entry.is_dir ? '<span class="miller-item-arrow">▶</span>' : ""}
       `;
       item.onclick = async () => {
-        focusArea = "main";
-        trayActive = false;
+        setFocusArea("main");
         col.selected = entry.path;
+        activeColumnIndex = ci;
         // Remove columns after this one
         columnData = columnData.slice(0, ci + 1);
         if (entry.is_dir) {
@@ -1398,12 +1583,51 @@ async function renderColumnView() {
         }
       };
       item.oncontextmenu = (e) => showContextMenu(e, entry);
+      // Drag & Drop
+      item.draggable = true;
+      item.ondragstart = (e) => {
+        if (!selectedPaths.has(entry.path)) {
+          selectedPaths.clear();
+          selectedPaths.add(entry.path);
+          renderColumnView();
+        }
+        e.dataTransfer.setData("application/json", JSON.stringify([...selectedPaths]));
+        e.dataTransfer.effectAllowed = "move";
+      };
+      item.ondragend = () => {
+        document.querySelectorAll(".dragging, .drop-target").forEach(r => r.classList.remove("dragging", "drop-target"));
+      };
+      if (entry.is_dir) {
+        item.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; item.classList.add("drop-target"); };
+        item.ondragleave = () => item.classList.remove("drop-target");
+        item.ondrop = async (e) => {
+          e.preventDefault();
+          item.classList.remove("drop-target");
+          const paths = JSON.parse(e.dataTransfer.getData("application/json") || "[]");
+          if (paths.length === 0 || paths.includes(entry.path)) return;
+          const fromTray = e.dataTransfer.getData("text/x-wls-source") === "tray";
+          if (fromTray) {
+            await showTrayDropDialog(paths, entry.path);
+            return;
+          }
+          try {
+            const res = await fetch("/api/move", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paths, dest: entry.path }),
+            });
+            if (res.ok) navigate(currentDir, false);
+            else alert("Move failed: " + (await res.text()));
+          } catch (err) { alert("Error: " + err.message); }
+        };
+      }
       colEl.appendChild(item);
     }
     container.appendChild(colEl);
   }
   // Auto scroll right
   container.scrollLeft = container.scrollWidth;
+  updateStatusbar();
 }
 
 function switchView(mode) {
@@ -1416,7 +1640,7 @@ function switchView(mode) {
   if (mode === "list") {
     renderFiles();
   } else {
-    columnData = [{ dir: currentDir, entries: entries, selected: null }];
+    columnData = [{ dir: currentDir, entries: entries, selected: null }]; activeColumnIndex = 0;
     renderColumnView();
   }
 }
@@ -1427,7 +1651,7 @@ function escHtml(s) {
 
 let favoritesLoaded = false;
 
-async function navigate(dir, pushHistory = true) {
+async function navigate(dir, pushHistory = true, selectPath = null) {
   try {
     const res = await fetch("/api/ls?dir=" + encodeURIComponent(dir));
     const data = await res.json();
@@ -1435,6 +1659,7 @@ async function navigate(dir, pushHistory = true) {
     parentDir = data.parent;
     entries = data.entries;
     selectedPaths.clear();
+    if (selectPath) selectedPaths.add(selectPath);
     lastClickedPath = null;
     filterText = "";
     $("#search").value = "";
@@ -1462,12 +1687,22 @@ async function navigate(dir, pushHistory = true) {
     renderSidebar();
     renderBreadcrumb();
     if (viewMode === "columns") {
-      columnData = [{ dir: currentDir, entries: entries, selected: null }];
+      columnData = [{ dir: currentDir, entries: entries, selected: selectPath || null }]; activeColumnIndex = 0;
       renderColumnView();
     } else {
       renderFiles();
     }
-    renderPreview(null);
+    if (selectPath) {
+      const entry = entries.find(e => e.path === selectPath);
+      if (entry) renderPreview(entry);
+      // Scroll into view
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`.file-row[data-path="${CSS.escape(selectPath)}"], .miller-item.selected`);
+        if (row) row.scrollIntoView({ block: "nearest" });
+      });
+    } else {
+      renderPreview(null);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -1516,10 +1751,8 @@ $("#search").oninput = (e) => { filterText = e.target.value; renderCurrentView()
 function getVisibleItems() {
   if (focusArea === "main") {
     if (viewMode === "columns") {
-      // Use the last column with a selection, or the last column
-      for (let i = columnData.length - 1; i >= 0; i--) {
-        if (columnData[i].selected) return sortEntries(filterEntries(columnData[i].entries));
-      }
+      // Use activeColumnIndex
+      if (columnData[activeColumnIndex]) return sortEntries(filterEntries(columnData[activeColumnIndex].entries));
       return sortEntries(filterEntries(columnData[0]?.entries || entries));
     }
     return sortEntries(filterEntries(entries));
@@ -1541,6 +1774,9 @@ function getSelectedPath() {
   return null;
 }
 
+// Track which column is active in column view
+let activeColumnIndex = 0;
+
 function moveSelection(delta) {
   const items = getVisibleItems();
   if (items.length === 0) return;
@@ -1551,6 +1787,12 @@ function moveSelection(delta) {
     idx = Math.max(0, Math.min(items.length - 1, idx + delta));
     selectedPaths.clear();
     selectedPaths.add(items[idx].path);
+    // Update columnData.selected for column view
+    if (viewMode === "columns" && columnData[activeColumnIndex]) {
+      // Remove sub-columns when changing selection
+      columnData[activeColumnIndex].selected = items[idx].path;
+      columnData = columnData.slice(0, activeColumnIndex + 1);
+    }
     renderCurrentView();
     renderPreview(items[idx]);
     // Scroll into view
@@ -1596,12 +1838,37 @@ function openSelected() {
   }
 }
 
+function setFocusArea(area) {
+  focusArea = area;
+  trayActive = area === "tray";
+  document.body.dataset.focus = area;
+}
+
 function cycleFocus(reverse) {
   const areas = ["main", "tray", "sidebar"];
   let idx = areas.indexOf(focusArea);
   idx = (idx + (reverse ? -1 : 1) + areas.length) % areas.length;
-  focusArea = areas[idx];
-  trayActive = focusArea === "tray";
+  setFocusArea(areas[idx]);
+
+  // Auto-select first item if nothing is selected
+  const items = getVisibleItems();
+  if (focusArea === "main" && selectedPaths.size === 0 && items.length > 0) {
+    selectedPaths.add(items[0].path);
+    if (viewMode === "columns" && columnData[activeColumnIndex]) {
+      columnData[activeColumnIndex].selected = items[0].path;
+    }
+    renderCurrentView();
+    renderPreview(items[0]);
+  } else if (focusArea === "tray" && traySelectedPaths.size === 0 && items.length > 0) {
+    traySelectedPaths.add(items[0].path);
+    renderTray();
+  } else if (focusArea === "sidebar" && sidebarSelectedIndex < 0 && items.length > 0) {
+    sidebarSelectedIndex = 0;
+    document.querySelectorAll(".sidebar-item").forEach((el, i) => {
+      el.classList.toggle("active", i === 0);
+    });
+  }
+
   // Visual feedback
   document.querySelectorAll(".file-area, .tray-panel, .sidebar").forEach(el => el.style.outline = "");
   const targets = { main: ".file-area, .column-view:not(.hidden)", tray: ".tray-panel", sidebar: ".sidebar" };
@@ -1627,17 +1894,25 @@ function toggleCheatSheet() {
       <tr><td colspan="2" style="padding:3px 0;color:var(--text-dim);font-weight:600">Navigation</td></tr>
       <tr><td><kbd>J</kbd> <kbd>↓</kbd></td><td>Next item</td></tr>
       <tr><td><kbd>K</kbd> <kbd>↑</kbd></td><td>Previous item</td></tr>
+      <tr><td><kbd>H</kbd> <kbd>←</kbd></td><td>Column left</td></tr>
+      <tr><td><kbd>L</kbd> <kbd>→</kbd></td><td>Column right</td></tr>
       <tr><td><kbd>O</kbd> <kbd>Enter</kbd></td><td>Open</td></tr>
-      <tr><td><kbd>Backspace</kbd></td><td>Parent directory</td></tr>
+      <tr><td><kbd>U</kbd></td><td>Parent directory</td></tr>
       <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Cycle focus (Main → Tray → Sidebar)</td></tr>
       <tr><td><kbd>/</kbd></td><td>Search filter</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Clear search</td></tr>
       <tr><td colspan="2" style="padding:12px 0 3px;color:var(--text-dim);font-weight:600">Actions</td></tr>
       <tr><td><kbd>T</kbd></td><td>Add to Tray</td></tr>
-      <tr><td><kbd>Delete</kbd></td><td>Remove from Tray</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Rename</td></tr>
+      <tr><td><kbd>F</kbd></td><td>Open in Finder</td></tr>
+      <tr><td><kbd>⌘</kbd>+<kbd>⌫</kbd></td><td>Move to Trash</td></tr>
       <tr><td><kbd>⌘</kbd>+<kbd>C</kbd></td><td>Copy path</td></tr>
       <tr><td><kbd>⌘</kbd>+<kbd>A</kbd></td><td>Select all</td></tr>
+      <tr><td><kbd>Space</kbd></td><td>Quick Look</td></tr>
       <tr><td><kbd>.</kbd></td><td>Toggle hidden files</td></tr>
+      <tr><td colspan="2" style="padding:12px 0 3px;color:var(--text-dim);font-weight:600">Tray</td></tr>
+      <tr><td><kbd>⌫</kbd></td><td>Remove from Tray</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Go to Original Location</td></tr>
       <tr><td><kbd>?</kbd></td><td>This help</td></tr>
     </table>
     <div style="margin-top:16px;font-size:11px;color:var(--text-dim);text-align:center">Press <kbd>?</kbd> or <kbd>Esc</kbd> to close</div>
@@ -1646,7 +1921,106 @@ function toggleCheatSheet() {
   document.body.appendChild(overlay);
 }
 
+function toggleQuickLook() {
+  let overlay = document.getElementById("quicklook-overlay");
+  if (overlay) { overlay.remove(); return; }
+
+  // Find selected entry
+  const path = getSelectedPath();
+  if (!path) return;
+  let entry = null;
+  if (focusArea === "main") {
+    entry = entries.find(e => e.path === path);
+    if (!entry) {
+      for (const col of columnData) {
+        entry = col.entries.find(e => e.path === path);
+        if (entry) break;
+      }
+    }
+  } else if (focusArea === "tray") {
+    const item = trayItems.find(e => e.path === path);
+    if (item) entry = { path: item.path, name: item.name, is_dir: item.type === "dir", ext: (item.name.lastIndexOf(".") > 0 ? item.name.slice(item.name.lastIndexOf(".")).toLowerCase() : ""), size: item.size || 0, modified: item.modified || 0 };
+  }
+  if (!entry || entry.is_dir) return;
+
+  overlay = document.createElement("div");
+  overlay.id = "quicklook-overlay";
+  overlay.className = "quicklook-overlay";
+
+  const ext = entry.ext || "";
+  const fileUrl = encodeURI(entry.path);
+  let bodyContent = "";
+  let bodyStyle = "";
+  let panelStyle = "";
+
+  if (IMAGE_EXTS.has(ext)) {
+    bodyContent = `<img src="${fileUrl}" alt="${escHtml(entry.name)}">`;
+    panelStyle = "width:auto;height:auto;";
+  } else if (VIDEO_EXTS.has(ext)) {
+    bodyContent = `<video src="${fileUrl}" controls autoplay muted></video>`;
+    panelStyle = "width:70vw;height:70vh;";
+  } else if (ext === ".pdf") {
+    bodyContent = `<iframe src="${fileUrl}"></iframe>`;
+    panelStyle = "width:70vw;height:80vh;";
+    bodyStyle = "padding:0;";
+  } else if (ext === ".html" || ext === ".htm") {
+    bodyContent = `<iframe src="${fileUrl}" sandbox="allow-same-origin"></iframe>`;
+    panelStyle = "width:70vw;height:80vh;";
+    bodyStyle = "padding:0;";
+  } else if (MD_EXTS.has(ext)) {
+    panelStyle = "width:60vw;height:70vh;";
+    // Load async
+    fetch(fileUrl).then(r => r.text()).then(text => {
+      const body = overlay.querySelector(".quicklook-body");
+      if (body) body.innerHTML = `<div class="preview-markdown">${renderMarkdown(text)}</div>`;
+    });
+    bodyContent = `<div style="color:var(--text-dim)">Loading...</div>`;
+  } else if (ext === ".json") {
+    panelStyle = "width:60vw;height:70vh;";
+    fetch(fileUrl).then(r => r.text()).then(text => {
+      const body = overlay.querySelector(".quicklook-body");
+      if (body) body.innerHTML = `<div class="preview-code">${addLineNumbers(highlightJson(text))}</div>`;
+    });
+    bodyContent = `<div style="color:var(--text-dim)">Loading...</div>`;
+  } else if (CODE_EXTS.has(ext)) {
+    panelStyle = "width:60vw;height:70vh;";
+    fetch(fileUrl).then(r => r.text()).then(text => {
+      const body = overlay.querySelector(".quicklook-body");
+      if (body) body.innerHTML = `<div class="preview-code">${addLineNumbers(highlightCode(text, ext))}</div>`;
+    });
+    bodyContent = `<div style="color:var(--text-dim)">Loading...</div>`;
+  } else {
+    // Unsupported: show file info
+    bodyContent = `<div class="preview-info" style="text-align:center;padding:40px">
+      <div class="preview-icon" style="font-size:64px;margin-bottom:12px">${getIcon(entry)}</div>
+      <div class="preview-name" style="font-size:16px;font-weight:600">${escHtml(entry.name)}</div>
+      <div class="preview-meta" style="margin-top:8px;color:var(--text-dim)">${formatSize(entry.size)}<br>Modified: ${formatDate(entry.modified)}</div>
+    </div>`;
+  }
+
+  overlay.innerHTML = `<div class="quicklook-panel" style="${panelStyle}">
+    <div class="quicklook-header">
+      <span>${escHtml(entry.name)}</span>
+      <button class="ql-close" title="Close">✕</button>
+    </div>
+    <div class="quicklook-body" style="${bodyStyle}">${bodyContent}</div>
+    <div class="quicklook-footer">${formatSize(entry.size)} — ${formatDate(entry.modified)}</div>
+  </div>`;
+
+  overlay.querySelector(".ql-close").onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+
 document.addEventListener("keydown", (e) => {
+  // Quick Look open
+  if (document.getElementById("quicklook-overlay")) {
+    if (e.key === " " || e.key === "Escape") { e.preventDefault(); toggleQuickLook(); return; }
+    if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); document.getElementById("quicklook-overlay").remove(); moveSelection(1); toggleQuickLook(); return; }
+    if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); document.getElementById("quicklook-overlay").remove(); moveSelection(-1); toggleQuickLook(); return; }
+    return;
+  }
+
   // Close cheat sheet
   if ((e.key === "?" || e.key === "Escape") && document.getElementById("cheatsheet-overlay")) {
     e.preventDefault();
@@ -1669,8 +2043,80 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); moveSelection(1); return; }
   if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); moveSelection(-1); return; }
 
+  // h/l or ←/→ — column view: move between columns
+  if ((e.key === "l" || e.key === "ArrowRight") && focusArea === "main" && viewMode === "columns") {
+    e.preventDefault();
+    const sel = columnData[activeColumnIndex]?.selected;
+    if (sel) {
+      // If selected item is a dir and next column exists, move into it
+      const items = sortEntries(filterEntries(columnData[activeColumnIndex].entries));
+      const entry = items.find(en => en.path === sel);
+      if (entry && entry.is_dir && activeColumnIndex + 1 < columnData.length) {
+        activeColumnIndex++;
+        // Select first item in new column
+        const newItems = sortEntries(filterEntries(columnData[activeColumnIndex].entries));
+        if (newItems.length > 0) {
+          columnData[activeColumnIndex].selected = newItems[0].path;
+          selectedPaths.clear();
+          selectedPaths.add(newItems[0].path);
+          renderColumnView();
+          renderPreview(newItems[0]);
+        }
+      } else if (entry && entry.is_dir) {
+        // Need to load the column first (simulate click)
+        (async () => {
+          try {
+            const res = await fetch("/api/ls?dir=" + encodeURIComponent(entry.path));
+            const data = await res.json();
+            columnData.push({ dir: data.dir, entries: data.entries, selected: null });
+            activeColumnIndex++;
+            const newItems = sortEntries(filterEntries(data.entries));
+            if (newItems.length > 0) {
+              columnData[activeColumnIndex].selected = newItems[0].path;
+              selectedPaths.clear();
+              selectedPaths.add(newItems[0].path);
+              renderPreview(newItems[0]);
+            }
+            renderColumnView();
+          } catch {}
+        })();
+      }
+    }
+    return;
+  }
+  if ((e.key === "h" || e.key === "ArrowLeft") && focusArea === "main" && viewMode === "columns") {
+    e.preventDefault();
+    if (activeColumnIndex > 0) {
+      // Clear selection in current column before moving left
+      if (columnData[activeColumnIndex]) columnData[activeColumnIndex].selected = null;
+      // Remove columns after current
+      columnData = columnData.slice(0, activeColumnIndex);
+      activeColumnIndex--;
+      const sel = columnData[activeColumnIndex]?.selected;
+      if (sel) {
+        selectedPaths.clear();
+        selectedPaths.add(sel);
+        const items = sortEntries(filterEntries(columnData[activeColumnIndex].entries));
+        const entry = items.find(en => en.path === sel);
+        renderColumnView();
+        if (entry) renderPreview(entry);
+      }
+    }
+    return;
+  }
+
+  // u — parent directory
+  if (e.key === "u") {
+    e.preventDefault();
+    if (parentDir && parentDir !== currentDir) navigate(parentDir);
+    return;
+  }
+
   // o / Enter — open
   if (e.key === "o" || e.key === "Enter") { e.preventDefault(); openSelected(); return; }
+
+  // Space — Quick Look
+  if (e.key === " ") { e.preventDefault(); toggleQuickLook(); return; }
 
   // / — focus search
   if (e.key === "/") { e.preventDefault(); $("#search").focus(); return; }
@@ -1702,6 +2148,74 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
+  // R — rename selected
+  if (e.key === "r" || e.key === "R") {
+    e.preventDefault();
+    if (focusArea === "main" && selectedPaths.size === 1) {
+      const path = [...selectedPaths][0];
+      let entry = entries.find(en => en.path === path);
+      if (!entry) {
+        for (const col of columnData) {
+          entry = col.entries.find(en => en.path === path);
+          if (entry) break;
+        }
+      }
+      if (entry) startRename(entry);
+    }
+    return;
+  }
+
+  // F — open in Finder
+  if (e.key === "f" || e.key === "F") {
+    e.preventDefault();
+    const path = getSelectedPath();
+    if (path) {
+      // Determine if it's a directory
+      let isDir = false;
+      const items = getVisibleItems();
+      const entry = items.find(en => en.path === path);
+      if (entry) isDir = entry.is_dir || entry.type === "dir";
+      const tItem = trayItems.find(en => en.path === path);
+      if (tItem) isDir = tItem.type === "dir";
+      // Open the item itself in Finder (dirs open as Finder window, files reveal in Finder)
+      fetch("/api/open?path=" + encodeURIComponent(isDir ? path : path.substring(0, path.lastIndexOf("/"))));
+    }
+    return;
+  }
+
+  // Cmd+Delete / Cmd+Backspace — move to trash
+  if ((e.metaKey || e.ctrlKey) && (e.key === "Delete" || e.key === "Backspace") && focusArea === "main" && selectedPaths.size > 0) {
+    e.preventDefault();
+    const paths = [...selectedPaths];
+    const msg = paths.length > 1 ? `Move ${paths.length} items to Trash?` : `Move "${paths[0].split("/").pop()}" to Trash?`;
+    if (!confirm(msg)) return;
+    (async () => {
+      try {
+        for (const p of paths) {
+          await fetch("/api/trash", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: p }) });
+        }
+        navigate(currentDir, false);
+      } catch (err) { alert("Error: " + err.message); }
+    })();
+    return;
+  }
+
+  // G — go to original location (tray)
+  if ((e.key === "g" || e.key === "G") && focusArea === "tray") {
+    e.preventDefault();
+    const path = [...traySelectedPaths][0];
+    if (path) {
+      const dir = path.substring(0, path.lastIndexOf("/"));
+      if (dir) {
+        (async () => {
+          await navigate(dir, true, path);
+          setFocusArea("main");
+        })();
+      }
+    }
+    return;
+  }
+
   // T: add selected to tray
   if (e.key === "t" || e.key === "T") {
     e.preventDefault();
@@ -1719,7 +2233,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.key === "Delete" || e.key === "Backspace") && trayActive && traySelectedPaths.size > 0) {
     e.preventDefault();
     removeFromTray([...traySelectedPaths]);
-    trayActive = false;
+    setFocusArea("main");
     return;
   }
   if (e.key === "Backspace") {
@@ -1819,9 +2333,23 @@ ctxMenu.querySelectorAll(".context-menu-item").forEach(item => {
 });
 
 function startRename(entry) {
-  const row = document.querySelector(`.file-row[data-path="${CSS.escape(entry.path)}"]`);
-  if (!row) return;
-  const nameSpan = row.querySelector(".file-name span:last-child");
+  let row = document.querySelector(`.file-row[data-path="${CSS.escape(entry.path)}"]`);
+  let nameSpan;
+  if (row) {
+    nameSpan = row.querySelector(".file-name span:last-child");
+  } else {
+    // Column view: find the miller-item by matching entry name in selected column
+    const items = document.querySelectorAll(".miller-item");
+    for (const item of items) {
+      const nameEl = item.querySelector(".miller-item-name");
+      if (nameEl && nameEl.textContent === entry.name) {
+        row = item;
+        nameSpan = nameEl;
+        break;
+      }
+    }
+  }
+  if (!row || !nameSpan) return;
   const original = entry.name;
   const input = document.createElement("input");
   input.className = "rename-input";
@@ -1986,8 +2514,7 @@ function renderTray() {
     el.innerHTML = `<span>${icon}</span><span>${item.name}</span><span class="tray-path" title="${item.path}">${dir}</span>`;
 
     el.onclick = (e) => {
-      trayActive = true;
-      focusArea = "tray";
+      setFocusArea("tray");
       selectedPaths.clear();
       if (e.metaKey || e.ctrlKey) {
         if (traySelectedPaths.has(item.path)) traySelectedPaths.delete(item.path);
@@ -2043,7 +2570,7 @@ function renderTray() {
 // Tray context menu
 const trayCtxMenu = $("#tray-context-menu");
 trayCtxMenu.querySelectorAll(".context-menu-item").forEach(el => {
-  el.onclick = () => {
+  el.onclick = async () => {
     const action = el.dataset.action;
     const item = JSON.parse(trayCtxMenu.dataset.contextItem || "null");
     trayCtxMenu.classList.add("hidden");
@@ -2055,13 +2582,8 @@ trayCtxMenu.querySelectorAll(".context-menu-item").forEach(el => {
       fetch("/api/open?path=" + encodeURIComponent(item.path));
     } else if (action === "tray-goto") {
       const parentDir = item.path.substring(0, item.path.lastIndexOf("/")) || "/";
-      navigate(parentDir);
-      // Select the item after navigation
-      setTimeout(() => {
-        selectedPaths.clear();
-        selectedPaths.add(item.path);
-        renderFiles();
-      }, 200);
+      await navigate(parentDir, true, item.path);
+      setFocusArea("main");
     } else if (action === "tray-copy-path") {
       const paths = [...traySelectedPaths];
       navigator.clipboard.writeText(paths.length === 1 ? paths[0] : paths.join("\n"));
@@ -2232,6 +2754,7 @@ $("#btn-view-cols").classList.toggle("active", viewMode === "columns");
 $("#list-view").classList.toggle("hidden", viewMode !== "list");
 $("#column-view").classList.toggle("hidden", viewMode !== "columns");
 const initPath = decodeURI(window.location.pathname);
+updateStatusbar();
 navigate(initPath.length > 1 ? initPath : "~");
 </script>
 </body>
