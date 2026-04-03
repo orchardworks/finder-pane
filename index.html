@@ -1340,7 +1340,8 @@ function renderFiles() {
   const files = topList.filter(e => !e.is_dir).length;
   let status = `${dirs} folder${dirs !== 1 ? "s" : ""}, ${files} file${files !== 1 ? "s" : ""}`;
   if (selectedPaths.size > 1) status += ` — ${selectedPaths.size} selected`;
-  $("#statusbar").innerHTML = `${status}<span style="float:right;opacity:0.5">Press <kbd style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 3px;font-size:10px">?</kbd> for shortcuts</span>`;
+  $("#statusbar").innerHTML = `${status}<span id="shortcut-hint" style="float:right;opacity:0.5;cursor:pointer" title="Show keyboard shortcuts"><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:0 3px;font-size:10px">?</kbd> Shortcuts</span>`;
+  $("#shortcut-hint").onclick = (e) => { e.stopPropagation(); toggleCheatSheet(); };
 }
 
 // Column view (Miller columns)
@@ -1628,14 +1629,14 @@ function toggleCheatSheet() {
       <tr><td><kbd>K</kbd> <kbd>↑</kbd></td><td>Previous item</td></tr>
       <tr><td><kbd>O</kbd> <kbd>Enter</kbd></td><td>Open</td></tr>
       <tr><td><kbd>Backspace</kbd></td><td>Parent directory</td></tr>
-      <tr><td><kbd>Tab</kbd> <kbd>Shift+Tab</kbd></td><td>Cycle focus (Main → Tray → Sidebar)</td></tr>
+      <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Cycle focus (Main → Tray → Sidebar)</td></tr>
       <tr><td><kbd>/</kbd></td><td>Search filter</td></tr>
       <tr><td><kbd>Esc</kbd></td><td>Clear search</td></tr>
       <tr><td colspan="2" style="padding:12px 0 3px;color:var(--text-dim);font-weight:600">Actions</td></tr>
       <tr><td><kbd>T</kbd></td><td>Add to Tray</td></tr>
       <tr><td><kbd>Delete</kbd></td><td>Remove from Tray</td></tr>
-      <tr><td><kbd>⌘C</kbd></td><td>Copy path</td></tr>
-      <tr><td><kbd>⌘A</kbd></td><td>Select all</td></tr>
+      <tr><td><kbd>⌘</kbd>+<kbd>C</kbd></td><td>Copy path</td></tr>
+      <tr><td><kbd>⌘</kbd>+<kbd>A</kbd></td><td>Select all</td></tr>
       <tr><td><kbd>.</kbd></td><td>Toggle hidden files</td></tr>
       <tr><td><kbd>?</kbd></td><td>This help</td></tr>
     </table>
