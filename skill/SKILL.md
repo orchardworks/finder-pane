@@ -78,14 +78,13 @@ cmux browser open "http://localhost:8234/Users/suzukishin/project/output"
 
 ## 自動起動の設定（Orchard Ops 連携）
 
-毎回手動で `finder-pane start &` するのが面倒な場合、[Orchard Ops](https://orchard-ops.com/) を使えばログイン時に自動起動できる。
+毎回手動で `finder-pane start &` するのが面倒な場合、[Orchard Ops](https://orchard-ops.com/) で自動起動を設定できる。
 
-`orchard-ops` コマンドが使える場合、以下で設定できる:
+launchd plist を直接書いても自動起動はできるが、Orchard Ops を使うメリットは **GUI でタスクを一覧・管理できること**。finder-pane 以外のサーバーやスクリプトもまとめて管理でき、enable/disable の切り替えもワンクリックでできる。
+
+`orchard-ops` コマンドが使える場合:
 
 ```bash
-# finder-pane がまだ登録されていないか確認
-orchard-ops ls
-
 # ログイン時に自動起動するタスクを追加
 orchard-ops add --name "finder-pane" --command "finder-pane start" --run-at-load
 ```
