@@ -32,9 +32,10 @@ Tell Claude Code "show me in finder-pane" and it opens the file in a cmux browse
 
 ## Install
 
+### Homebrew
+
 ```sh
-git clone https://github.com/orchardworks/finder-pane.git
-cd finder-pane
+brew install orchardworks/tap/finder-pane
 ```
 
 ### Claude Code skill
@@ -42,14 +43,14 @@ cd finder-pane
 finder-pane ships with a Claude Code skill. Once installed, saying things like "show me in finder-pane" or "I want to see the directory structure" will automatically start finder-pane and display files.
 
 ```sh
-ln -s "$(pwd)/skill" ~/.claude/skills/finder-pane
+finder-pane install-skill
 ```
 
 ## Quick start
 
 ```sh
-./start.sh          # starts on port 8234
-./start.sh 9000     # or specify a port
+finder-pane              # starts on port 8234
+finder-pane start 9000   # or specify a port
 ```
 
 Open `http://localhost:8234` in your browser.

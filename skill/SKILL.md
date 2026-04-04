@@ -13,21 +13,14 @@ finder-pane はブラウザで動く Finder ライクなファイルブラウザ
 
 finder-pane を使う前に、まず以下を確認:
 
-1. **finder-pane の場所を特定** — `FP_DIR` を探す:
-   ```bash
-   # skill の symlink 元からプロジェクトルートを推定
-   FP_DIR="$(dirname "$(readlink -f ~/.claude/skills/finder-pane/SKILL.md)")"
-   FP_DIR="$(dirname "$FP_DIR")"  # skill/ の親 = プロジェクトルート
-   ```
-
-2. **サーバーが起動しているか確認**:
+1. **サーバーが起動しているか確認**:
    ```bash
    curl -s http://localhost:8234/api/ls?dir=~ > /dev/null 2>&1
    ```
 
-3. **起動していなければ起動** (バックグラウンド):
+2. **起動していなければ起動** (バックグラウンド):
    ```bash
-   "$FP_DIR/start.sh" &
+   finder-pane start &
    ```
 
 ## 使い方

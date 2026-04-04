@@ -1,5 +1,8 @@
 #!/bin/bash
 # finder-pane: Finder-like file browser for cmux
-PORT=${1:-8234}
 DIR="$(cd "$(dirname "$0")" && pwd)"
-exec python3 "$DIR/server.py" "$PORT"
+if [ $# -eq 0 ]; then
+  exec python3 "$DIR/cli.py" start
+else
+  exec python3 "$DIR/cli.py" "$@"
+fi
