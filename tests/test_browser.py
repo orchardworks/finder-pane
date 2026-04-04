@@ -82,6 +82,79 @@ class TestSidebar:
         assert len(items) > 0, "Sidebar should have at least one item"
 
 
+# --- Smoke Tests ---
+
+class TestBasicLoad:
+    def test_page_title_contains_wls(self, app: Page):
+        """Page title should contain 'wls'."""
+        assert "wls" in app.title().lower()
+
+    def test_file_list_renders(self, app: Page):
+        """.file-row elements should exist in the file list."""
+        rows = app.query_selector_all(".file-row")
+        assert len(rows) > 0, "File list should contain .file-row elements"
+
+    def test_breadcrumb_renders(self, app: Page):
+        """#breadcrumb should have content (not empty)."""
+        breadcrumb = app.query_selector("#breadcrumb")
+        assert breadcrumb is not None
+        text = breadcrumb.inner_text().strip()
+        assert len(text) > 0, "Breadcrumb should not be empty"
+
+    def test_tray_panel_visible(self, app: Page):
+        """#tray-panel should be visible."""
+        expect(app.locator("#tray-panel")).to_be_visible()
+
+    def test_toolbar_buttons_visible(self, app: Page):
+        """View switching buttons should be visible."""
+        expect(app.locator("#btn-view-list")).to_be_visible()
+        expect(app.locator("#btn-view-cols")).to_be_visible()
+
+    def test_search_box_visible(self, app: Page):
+        """#search input should be visible."""
+        expect(app.locator("#search")).to_be_visible()
+
+
+class TestBasicNavigation:
+    def test_double_click_directory_navigates(self, app: Page, temp_dir):
+        """Double-clicking a directory should change the breadcrumb."""
+        breadcrumb_before = app.query_selector("#breadcrumb").inner_text()
+        subdir_row = app.query_selector(f'.file-row[data-path="{temp_dir}/subdir"]')
+        assert subdir_row is not None, "subdir row should exist"
+        subdir_row.dblclick()
+        app.wait_for_timeout(500)
+        breadcrumb_after = app.query_selector("#breadcrumb").inner_text()
+        assert breadcrumb_after != breadcrumb_before, "Breadcrumb should change after navigating into subdir"
+        assert "subdir" in breadcrumb_after
+
+    def test_u_key_goes_up(self, app: Page, temp_dir):
+        """After navigating into subdir, pressing 'u' should go back to parent."""
+        # Navigate into subdir
+        subdir_row = app.query_selector(f'.file-row[data-path="{temp_dir}/subdir"]')
+        assert subdir_row is not None
+        subdir_row.dblclick()
+        app.wait_for_timeout(500)
+        # Press u to go up
+        app.keyboard.press("u")
+        app.wait_for_timeout(500)
+        breadcrumb = app.query_selector("#breadcrumb").inner_text()
+        assert "subdir" not in breadcrumb, "Should have navigated back to parent"
+
+
+class TestPreviewPane:
+    def test_preview_pane_shows_on_file_click(self, app: Page, temp_dir):
+        """Clicking a file should make #preview-pane visible."""
+        row = app.query_selector(f'.file-row[data-path="{temp_dir}/file_000.txt"]')
+        assert row is not None, "file_000.txt row should exist"
+        row.click()
+        app.wait_for_timeout(500)
+        preview = app.query_selector("#preview-pane")
+        assert preview is not None, "Preview pane element should exist"
+        # Preview pane should be visible (not hidden)
+        is_visible = preview.is_visible()
+        assert is_visible, "Preview pane should be visible after clicking a file"
+
+
 # --- Navigation & Display ---
 
 class TestScrollFollowing:
