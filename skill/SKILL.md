@@ -3,6 +3,11 @@ name: finder-pane
 description: "Use when the user wants to browse directories, view images/videos/files visually, check directory structure, or needs a visual file browser alongside their terminal work. Also triggers when user generates images/videos and wants to preview them."
 user-invocable: true
 version: "1.0.0"
+metadata:
+  openclaw:
+    category: "productivity"
+    requires:
+      bins: ["finder-pane"]
 ---
 
 # finder-pane — Web-based File Browser
