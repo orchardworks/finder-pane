@@ -1847,6 +1847,7 @@ async function navigate(dir, pushHistory = true, selectPath = null) {
     if (!favoritesLoaded) {
       favoritesLoaded = true;
       await loadFavorites();
+      renderSidebar();
     }
 
     if (pushHistory) {

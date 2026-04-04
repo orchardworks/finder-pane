@@ -73,6 +73,15 @@ def app(page: Page, test_server, temp_dir):
     return page
 
 
+# --- Sidebar ---
+
+class TestSidebar:
+    def test_sidebar_has_items(self, app: Page):
+        """Sidebar should render favorite items on initial load."""
+        items = app.query_selector_all(".sidebar-item")
+        assert len(items) > 0, "Sidebar should have at least one item"
+
+
 # --- Navigation & Display ---
 
 class TestScrollFollowing:
