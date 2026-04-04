@@ -74,16 +74,6 @@
   .breadcrumb span:hover { background: var(--hover); }
   .breadcrumb .sep { color: var(--text-dim); cursor: default; font-size: 11px; }
   .breadcrumb .sep:hover { background: none; }
-  .breadcrumb-input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--text);
-    font-size: 13px;
-    font-family: inherit;
-    outline: none;
-    padding: 0 2px;
-  }
   .search-box {
     width: 160px;
     padding: 4px 8px;
@@ -1163,29 +1153,6 @@ function renderBreadcrumb() {
   bc.scrollLeft = bc.scrollWidth;
 }
 
-// Double-click breadcrumb to enter path edit mode
-$("#breadcrumb").addEventListener("dblclick", (e) => {
-  const bc = $("#breadcrumb");
-  bc.innerHTML = "";
-  const input = document.createElement("input");
-  input.className = "breadcrumb-input";
-  input.value = currentDir;
-  bc.appendChild(input);
-  input.focus();
-  input.select();
-
-  const commit = () => {
-    const val = input.value.trim();
-    renderBreadcrumb();
-    if (val && val !== currentDir) navigate(val);
-  };
-  input.onblur = commit;
-  input.onkeydown = (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-    if (ev.key === "Escape") { ev.preventDefault(); input.value = currentDir; input.blur(); }
-    ev.stopPropagation();
-  };
-});
 
 // Preview
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp", ".tiff", ".heic"]);
