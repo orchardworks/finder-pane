@@ -1856,7 +1856,7 @@ async function navigate(dir, pushHistory = true, selectPath = null) {
       historyIdx = history.length - 1;
     }
 
-    // URLバーを現在のディレクトリに同期
+    // Sync the URL bar to the current directory
     const newUrl = encodeFilePath(currentDir);
     if (window.location.pathname !== newUrl) {
       window.history.replaceState({ dir: currentDir }, "", newUrl);
@@ -2507,7 +2507,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// ブラウザの戻る/進むボタン対応
+// Handle browser back/forward buttons
 window.addEventListener("popstate", (e) => {
   if (e.state && e.state.dir) {
     navigate(e.state.dir, false);

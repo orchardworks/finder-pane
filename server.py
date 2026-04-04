@@ -307,7 +307,7 @@ class FinderHandler(SimpleHTTPRequestHandler):
             if os.path.isfile(realpath):
                 self.serve_file(realpath)
             elif os.path.isdir(realpath):
-                # ディレクトリならUIを返してそのディレクトリを開く
+                # Directory — serve the UI so it opens this directory
                 self.serve_html()
             else:
                 self.send_error(404)
