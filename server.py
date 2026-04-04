@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -85,43 +86,36 @@ BUNDLE_EXTS = {
     ".prefPane", ".screensaver", ".pkg", ".mpkg", ".rtfd",
 }
 
-def _get_swift_binary():
-    """Compile and cache the Swift favorites reader binary."""
+_compile_lock = threading.Lock()
+
+def _compile_swift_cached(name, code):
+    """Compile Swift code to a cached binary. Thread-safe via atomic rename."""
     cache_dir = os.path.join(tempfile.gettempdir(), "wls_cache")
     os.makedirs(cache_dir, exist_ok=True)
-
-    code_hash = hashlib.md5(SWIFT_CODE.encode()).hexdigest()[:12]
-    binary_path = os.path.join(cache_dir, f"favorites_{code_hash}")
-
-    if not os.path.exists(binary_path):
-        swift_src = os.path.join(cache_dir, "favorites.swift")
+    code_hash = hashlib.md5(code.encode()).hexdigest()[:12]
+    binary_path = os.path.join(cache_dir, f"{name}_{code_hash}")
+    if os.path.exists(binary_path):
+        return binary_path
+    with _compile_lock:
+        if os.path.exists(binary_path):
+            return binary_path
+        swift_src = os.path.join(cache_dir, f"{name}.swift")
+        tmp_bin = binary_path + f".tmp.{os.getpid()}"
         with open(swift_src, "w") as f:
-            f.write(SWIFT_CODE)
+            f.write(code)
         subprocess.run(
             ["swiftc", "-O", "-framework", "Cocoa", "-suppress-warnings",
-             swift_src, "-o", binary_path],
+             swift_src, "-o", tmp_bin],
             check=True, capture_output=True,
         )
+        os.rename(tmp_bin, binary_path)
     return binary_path
+
+def _get_swift_binary():
+    return _compile_swift_cached("favorites", SWIFT_CODE)
 
 def _get_icon_binary():
-    """Compile and cache the Swift icon extractor binary."""
-    cache_dir = os.path.join(tempfile.gettempdir(), "wls_cache")
-    os.makedirs(cache_dir, exist_ok=True)
-
-    code_hash = hashlib.md5(SWIFT_ICON_CODE.encode()).hexdigest()[:12]
-    binary_path = os.path.join(cache_dir, f"icon_{code_hash}")
-
-    if not os.path.exists(binary_path):
-        swift_src = os.path.join(cache_dir, "icon.swift")
-        with open(swift_src, "w") as f:
-            f.write(SWIFT_ICON_CODE)
-        subprocess.run(
-            ["swiftc", "-O", "-framework", "Cocoa", "-suppress-warnings",
-             swift_src, "-o", binary_path],
-            check=True, capture_output=True,
-        )
-    return binary_path
+    return _compile_swift_cached("icon", SWIFT_ICON_CODE)
 
 # Cache for icon PNGs: path -> png_path
 _icon_cache = {}
@@ -392,7 +386,7 @@ class FinderHandler(SimpleHTTPRequestHandler):
         self.wfile.write(json.dumps(volumes).encode())
 
     def serve_file(self, filepath):
-        """Serve a file's content with appropriate Content-Type."""
+        """Serve a file's content with appropriate Content-Type. Supports Range requests."""
         filepath = os.path.abspath(filepath)
         # Security: only serve actual files
         if not os.path.isfile(filepath):
@@ -403,10 +397,53 @@ class FinderHandler(SimpleHTTPRequestHandler):
             if mime is None:
                 mime = "application/octet-stream"
             size = os.path.getsize(filepath)
+
+            # Handle Range requests (for video/audio seeking)
+            range_header = self.headers.get("Range")
+            start = end = None
+            if range_header and range_header.startswith("bytes="):
+                try:
+                    range_spec = range_header[6:].split(",")[0].strip()
+                    parts = range_spec.split("-")
+                    if not parts[0]:
+                        start = max(size - int(parts[1]), 0)
+                        end = size - 1
+                    else:
+                        start = int(parts[0])
+                        end = int(parts[1]) if parts[1] else size - 1
+                    end = min(end, size - 1)
+                    if start >= size or start < 0:
+                        self.send_response(416)
+                        self.send_header("Content-Range", f"bytes */{size}")
+                        self.end_headers()
+                        return
+                except (ValueError, IndexError):
+                    start = end = None  # fall through to normal 200
+
+            if start is not None:
+                length = end - start + 1
+                self.send_response(206)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(length))
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Cache-Control", "max-age=60")
+                self.end_headers()
+                with open(filepath, "rb") as f:
+                    f.seek(start)
+                    remaining = length
+                    while remaining > 0:
+                        chunk = f.read(min(65536, remaining))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        remaining -= len(chunk)
+                return
+
             self.send_response(200)
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(size))
-    
+            self.send_header("Accept-Ranges", "bytes")
             self.send_header("Cache-Control", "max-age=60")
             self.end_headers()
             with open(filepath, "rb") as f:
@@ -474,7 +511,16 @@ class FinderHandler(SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # suppress logs
 
+def _precompile_swift():
+    """Pre-compile Swift binaries in background so first request is fast."""
+    try:
+        _get_swift_binary()
+        _get_icon_binary()
+    except Exception:
+        pass  # Will be retried on first request
+
 if __name__ == "__main__":
+    threading.Thread(target=_precompile_swift, daemon=True).start()
     server = ThreadingHTTPServer(("127.0.0.1", PORT), FinderHandler)
     print(f"Finder browser: http://127.0.0.1:{PORT}")
     server.serve_forever()

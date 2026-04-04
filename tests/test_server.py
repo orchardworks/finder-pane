@@ -372,6 +372,25 @@ class TestServeFile:
             urllib.request.urlopen(url)
         assert exc_info.value.code == 404
 
+    def test_range_request(self, test_server, temp_dir):
+        """Range request should return 206 with partial content."""
+        filepath = os.path.join(temp_dir, "Makefile")
+        url = f"{test_server}/api/file?path={urllib.parse.quote(filepath)}"
+        req = urllib.request.Request(url, headers={"Range": "bytes=0-3"})
+        resp = urllib.request.urlopen(req)
+        assert resp.status == 206
+        content = resp.read()
+        assert len(content) == 4
+        assert content == b"all:"
+        assert "Content-Range" in resp.headers
+
+    def test_accept_ranges_header(self, test_server, temp_dir):
+        """Normal file response should include Accept-Ranges header."""
+        filepath = os.path.join(temp_dir, "Makefile")
+        url = f"{test_server}/api/file?path={urllib.parse.quote(filepath)}"
+        resp = urllib.request.urlopen(url)
+        assert resp.headers.get("Accept-Ranges") == "bytes"
+
 
 # --- CORS ---
 
