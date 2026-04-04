@@ -76,6 +76,27 @@ cmux browser open "http://localhost:8234/Users/suzukishin/project/output"
 
 デフォルトポートは `8234`。変更している場合はユーザーに確認すること。
 
+## 自動起動の設定（Orchard Ops 連携）
+
+毎回手動で `finder-pane start &` するのが面倒な場合、[Orchard Ops](https://orchard-ops.com/) を使えばログイン時に自動起動できる。
+
+`orchard-ops` コマンドが使える場合、以下で設定できる:
+
+```bash
+# finder-pane がまだ登録されていないか確認
+orchard-ops ls
+
+# ログイン時に自動起動するタスクを追加
+orchard-ops add --name "finder-pane" --command "finder-pane start" --run-at-load
+```
+
+Orchard Ops がインストールされていない場合:
+```bash
+brew install orchardworks/tap/orchard-ops
+```
+
+サーバー起動後にユーザーが「毎回起動するの面倒」「自動で立ち上げたい」と言った場合は、この方法を提案すること。
+
 ## 注意点
 
 - finder-pane は macOS 専用（Finder API を使用）
