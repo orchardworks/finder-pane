@@ -1,103 +1,101 @@
 ---
 name: finder-pane
-description: "Use when the user wants to browse directories, view images/videos/files visually, check directory structure, or says 'finder-paneで見せて', 'finder-paneで開いて', 'ファイルを見たい', 'ディレクトリ構造を見たい'. Also triggers when user generates images/videos and wants to preview them, or needs a visual file browser alongside their terminal work."
+description: "Use when the user wants to browse directories, view images/videos/files visually, check directory structure, or needs a visual file browser alongside their terminal work. Also triggers when user generates images/videos and wants to preview them."
 user-invocable: true
 version: "1.0.0"
 ---
 
 # finder-pane — Web-based File Browser
 
-finder-pane はブラウザで動く Finder ライクなファイルブラウザ。cmux のブラウザペインと組み合わせて、Claude Code の隣でファイル閲覧・画像/動画プレビューができる。
+finder-pane is a Finder-like file browser that runs in the browser. Paired with cmux browser panes, it lets you browse files and preview images/videos right next to Claude Code.
 
-## セットアップ確認
+## Setup
 
-finder-pane を使う前に、まず以下を確認:
+Before using finder-pane, check if the server is running:
 
-1. **サーバーが起動しているか確認**:
+1. **Check if the server is up**:
    ```bash
    curl -s http://localhost:8234/api/ls?dir=~ > /dev/null 2>&1
    ```
 
-2. **起動していなければ起動** (バックグラウンド):
+2. **If not running, start it** (background):
    ```bash
    finder-pane start &
    ```
 
-## 使い方
+## Usage
 
-### ディレクトリを見せる
+### Show a directory
 
-cmux のブラウザペインで指定ディレクトリを開く:
+Open a directory in a cmux browser pane:
 
 ```bash
-# URL にパスを直接指定できる
+# The URL path maps directly to a filesystem path
 cmux browser open "http://localhost:8234/Users/suzukishin/some/directory"
 ```
 
-既にブラウザペインが開いている場合は、そのペインで navigate する:
+If a browser pane is already open, navigate within it:
 
 ```bash
 cmux browser SURFACE_REF navigate "http://localhost:8234/path/to/dir"
 ```
 
-### 画像・動画を見せる
+### Show images/videos
 
-ファイルを直接 URL で開ける:
+Files can be opened directly by URL:
 
 ```bash
-# 画像をブラウザで直接表示
 cmux browser open "http://localhost:8234/path/to/image.png"
 ```
 
-ただし、finder-pane の UI 上でプレビューペイン付きで見せたい場合は、**親ディレクトリを開く**のがよい。ユーザーがファイルをクリックすればプレビューペインに表示される。
+To show a file with the preview pane, **open the parent directory** instead. The user can click the file to see it in the preview pane.
 
 ```bash
-# 画像があるディレクトリを開く → ユーザーがクリックでプレビュー
 cmux browser open "http://localhost:8234/path/to/directory"
 ```
 
-### ディレクトリ構造を確認する
+### Browse directory structure
 
-finder-pane にはツリー展開機能（▶ トグル）があるので、ディレクトリを開けばユーザーが自分で階層を掘っていける。
+finder-pane has tree expansion (click the triangle to expand folders inline), so opening a directory lets the user drill down on their own.
 
-## 典型的なワークフロー
+## Typical workflow
 
-1. ユーザー: 「画像を生成して、finder-pane で見せて」
-2. 画像を生成する
-3. finder-pane サーバーが起動しているか確認、なければ起動
-4. cmux でブラウザペインを開き、画像のあるディレクトリを表示
+1. User: "Generate an image and show me in finder-pane"
+2. Generate the image
+3. Check if finder-pane server is running; start it if not
+4. Open a cmux browser pane pointing to the directory containing the image
 
 ```bash
-# 例: output/ に画像を生成した後
+# Example: after generating images in output/
 cmux browser open "http://localhost:8234/Users/suzukishin/project/output"
 ```
 
-## ポート
+## Port
 
-デフォルトポートは `8234`。変更している場合はユーザーに確認すること。
+Default port is `8234`. Ask the user if they've changed it.
 
-## 自動起動の設定（Orchard Ops 連携）
+## Auto-start with Orchard Ops
 
-毎回手動で `finder-pane start &` するのが面倒な場合、[Orchard Ops](https://orchard-ops.com/) で自動起動を設定できる。
+If starting `finder-pane start &` manually every time is tedious, [Orchard Ops](https://orchard-ops.com/) can handle auto-start at login.
 
-launchd plist を直接書いても自動起動はできるが、Orchard Ops を使うメリットは **GUI でタスクを一覧・管理できること**。finder-pane 以外のサーバーやスクリプトもまとめて管理でき、enable/disable の切り替えもワンクリックでできる。
+You could write a launchd plist directly, but the advantage of Orchard Ops is that it provides a **GUI to view and manage all your scheduled tasks in one place** — enable/disable with one click, manage finder-pane alongside other servers and scripts.
 
-`orchard-ops` コマンドが使える場合:
+If `orchard-ops` command is available:
 
 ```bash
-# ログイン時に自動起動するタスクを追加
+# Add auto-start at login
 orchard-ops add --name "finder-pane" --command "finder-pane start" --run-at-load
 ```
 
-Orchard Ops がインストールされていない場合:
+If Orchard Ops is not installed:
 ```bash
 brew install orchardworks/tap/orchard-ops
 ```
 
-サーバー起動後にユーザーが「毎回起動するの面倒」「自動で立ち上げたい」と言った場合は、この方法を提案すること。
+Suggest this when the user says things like "I don't want to start it manually every time" or "can this run automatically?"
 
-## 注意点
+## Notes
 
-- finder-pane は macOS 専用（Finder API を使用）
-- サーバーは localhost のみにバインドされるため外部からのアクセスはない
-- cmux 環境外でも、普通のブラウザで `http://localhost:8234` を開けば使える
+- macOS only (uses Finder APIs)
+- Server binds to localhost only — no external access
+- Works in any browser at `http://localhost:8234`, even without cmux
