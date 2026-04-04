@@ -1366,7 +1366,11 @@ async function renderSidebarPreview(entry) {
   }
 }
 
+let _previewAbort = null;
 async function renderPreview(entry) {
+  if (_previewAbort) _previewAbort.abort();
+  _previewAbort = new AbortController();
+  const signal = _previewAbort.signal;
   const pane = $("#preview-pane");
   // Check if right pane is force-hidden by CSS media query
   pane.classList.remove("hidden"); // temporarily show to test computed style
@@ -1386,7 +1390,7 @@ async function renderPreview(entry) {
   if (entry.is_dir) {
     // Fetch folder contents for preview
     try {
-      const res = await fetch("/api/ls?dir=" + encodeURIComponent(entry.path));
+      const res = await fetch("/api/ls?dir=" + encodeURIComponent(entry.path), { signal });
       const data = await res.json();
       const items = data.entries.filter(e => !e.hidden);
       const dirs = items.filter(e => e.is_dir).length;
@@ -1411,8 +1415,8 @@ async function renderPreview(entry) {
           else fetch("/api/open?path=" + encodeURIComponent(el.dataset.path));
         };
       });
-    } catch {
-      setPreviewContent(`
+    } catch (e) {
+      if (e.name !== "AbortError") setPreviewContent(`
         <div class="preview-info">
           <div class="preview-icon">${getIcon(entry)}</div>
           <div class="preview-name">${escHtml(entry.name)}</div>
@@ -1436,22 +1440,22 @@ async function renderPreview(entry) {
     setPreviewContent(`<iframe src="${fileUrl}" sandbox="allow-same-origin"></iframe>`);
   } else if (MD_EXTS.has(ext)) {
     try {
-      const res = await fetch(fileUrl);
+      const res = await fetch(fileUrl, { signal });
       const text = await res.text();
       setPreviewContent(`<div class="preview-markdown">${renderMarkdown(text)}</div>`);
-    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
+    } catch (e) { if (e.name !== "AbortError") setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else if (ext === ".json") {
     try {
-      const res = await fetch(fileUrl);
+      const res = await fetch(fileUrl, { signal });
       const text = await res.text();
       setPreviewContent(`<div class="preview-code">${addLineNumbers(highlightJson(text))}</div>`);
-    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
+    } catch (e) { if (e.name !== "AbortError") setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else if (CODE_EXTS.has(ext)) {
     try {
-      const res = await fetch(fileUrl);
+      const res = await fetch(fileUrl, { signal });
       const text = await res.text();
       setPreviewContent(`<div class="preview-code">${addLineNumbers(highlightCode(text, ext))}</div>`);
-    } catch { setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
+    } catch (e) { if (e.name !== "AbortError") setPreviewContent(`<div class="preview-info">Failed to load</div>`); }
   } else {
     setPreviewContent(`
       <div class="preview-info">
@@ -2578,10 +2582,14 @@ function startRename(entry) {
   if (dotIdx > 0) input.setSelectionRange(0, dotIdx);
   else input.select();
 
+  let committed = false;
   const commit = async () => {
+    if (committed) return;
+    committed = true;
     const newName = input.value.trim();
     if (!newName || newName === original) {
-      navigate(currentDir, false);
+      // Restore the original name span (preserves classes like miller-item-name)
+      input.replaceWith(nameSpan);
       return;
     }
     try {
