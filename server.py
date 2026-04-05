@@ -126,7 +126,10 @@ class FinderHandler(SimpleHTTPRequestHandler):
         content_len = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(content_len)) if content_len else {}
 
-        if parsed.path == "/api/trash":
+        if parsed.path == "/api/shutdown":
+            self._json_response({"ok": True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
+        elif parsed.path == "/api/trash":
             self.trash_item(body.get("path", ""))
         elif parsed.path == "/api/rename":
             self.rename_item(body.get("path", ""), body.get("name", ""))
@@ -270,7 +273,9 @@ class FinderHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
-        if parsed.path == "/":
+        if parsed.path == "/api/ping":
+            self._json_response({"app": "finder-pane", "home": os.path.expanduser("~")})
+        elif parsed.path == "/":
             self.serve_html()
         elif parsed.path == "/api/ls":
             params = urllib.parse.parse_qs(parsed.query)
@@ -559,8 +564,20 @@ def _precompile_swift():
     except Exception:
         pass  # Will be retried on first request
 
+PORT_RANGE = 10  # Try up to 10 ports starting from PORT
+
 if __name__ == "__main__":
     threading.Thread(target=_precompile_swift, daemon=True).start()
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), FinderHandler)
-    print(f"Finder browser: http://127.0.0.1:{PORT}")
-    server.serve_forever()
+    last_err = None
+    for port in range(PORT, PORT + PORT_RANGE):
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", port), FinderHandler)
+            print(f"Finder browser: http://127.0.0.1:{port}")
+            server.serve_forever()
+            break
+        except OSError as e:
+            last_err = e
+            continue
+    else:
+        print(f"Could not bind to any port in {PORT}-{PORT + PORT_RANGE - 1}: {last_err}", file=sys.stderr)
+        sys.exit(1)

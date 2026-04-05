@@ -6,6 +6,7 @@ import sys
 
 VERSION = "0.2.0"
 DEFAULT_PORT = 8234
+PORT_RANGE = 10
 
 USAGE = f"""\
 finder-pane {VERSION} — Finder-like file browser for macOS
@@ -13,6 +14,8 @@ finder-pane {VERSION} — Finder-like file browser for macOS
 Usage:
   finder-pane open [PATH]        Open PATH (default: cwd) in a cmux browser pane
   finder-pane start [PORT]       Start the server (default port: {DEFAULT_PORT})
+  finder-pane stop               Stop the running server
+  finder-pane restart             Stop and start the server
   finder-pane status             Check if the server is running
   finder-pane install-skill      Install Claude Code skill
   finder-pane uninstall-skill    Remove Claude Code skill
@@ -36,59 +39,108 @@ def cmd_start(args):
     os.execvp(sys.executable, [sys.executable, server_py, str(port)])
 
 
-def _is_server_running(port=DEFAULT_PORT):
+def _find_my_server():
+    """Scan port range and return the port running this user's finder-pane, or None."""
+    import json
     import urllib.request
-    try:
-        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/volumes", timeout=2)
-        return True
-    except Exception:
-        return False
+    home = os.path.expanduser("~")
+    for port in range(DEFAULT_PORT, DEFAULT_PORT + PORT_RANGE):
+        try:
+            resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/ping", timeout=1)
+            data = json.loads(resp.read())
+            if data.get("app") == "finder-pane" and data.get("home") == home:
+                return port
+        except Exception:
+            continue
+    return None
 
 
-def _start_server_background(port=DEFAULT_PORT):
+def _start_server_background():
+    """Start the server (it will find an available port itself). Return the port or None."""
     import subprocess
+    import time
     server_py = os.path.join(os.path.dirname(os.path.realpath(__file__)), "server.py")
     subprocess.Popen(
-        [sys.executable, server_py, str(port)],
+        [sys.executable, server_py, str(DEFAULT_PORT)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # Wait for server to be ready
-    import time
     for _ in range(20):
         time.sleep(0.25)
-        if _is_server_running(port):
-            return True
-    return False
+        port = _find_my_server()
+        if port is not None:
+            return port
+    return None
 
 
 def cmd_open(args):
     path = os.path.abspath(args[0]) if args else os.getcwd()
 
-    if not _is_server_running():
+    port = _find_my_server()
+    if port is None:
         print("Starting server...", file=sys.stderr)
-        if not _start_server_background():
+        port = _start_server_background()
+        if port is None:
             print("Failed to start server", file=sys.stderr)
             sys.exit(1)
 
     import subprocess
-    url = f"http://localhost:{DEFAULT_PORT}{path}"
+    url = f"http://localhost:{port}{path}"
     subprocess.run(["cmux", "browser", "open", url])
 
 
-def cmd_status(args):
+def _stop_server(port):
+    """Send shutdown request to the server. Returns True if successful."""
     import urllib.request
-    port = DEFAULT_PORT
-    if args:
-        try:
-            port = int(args[0])
-        except ValueError:
-            print(f"Invalid port: {args[0]}", file=sys.stderr)
-            sys.exit(1)
     try:
-        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/volumes", timeout=2)
-        print(f"running on port {port}")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shutdown",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=5)
+        return True
     except Exception:
+        return False
+
+
+def cmd_stop(args):
+    port = _find_my_server()
+    if port is None:
+        print("not running")
+        return
+    if _stop_server(port):
+        print(f"stopped (was on port {port})")
+    else:
+        print("failed to stop server", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_restart(args):
+    port = _find_my_server()
+    if port is not None:
+        _stop_server(port)
+        import time
+        # Wait for port to be released
+        for _ in range(20):
+            time.sleep(0.25)
+            if _find_my_server() is None:
+                break
+
+    print("Starting server...", file=sys.stderr)
+    port = _start_server_background()
+    if port is None:
+        print("Failed to start server", file=sys.stderr)
+        sys.exit(1)
+    print(f"running on port {port}")
+
+
+def cmd_status(args):
+    port = _find_my_server()
+    if port is not None:
+        print(f"running on port {port}")
+    else:
         print("not running")
         sys.exit(1)
 
@@ -145,6 +197,10 @@ def main():
         cmd_open(args[1:])
     elif cmd == "start":
         cmd_start(args[1:])
+    elif cmd == "stop":
+        cmd_stop(args[1:])
+    elif cmd == "restart":
+        cmd_restart(args[1:])
     elif cmd == "status":
         cmd_status(args[1:])
     elif cmd == "install-skill":

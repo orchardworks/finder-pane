@@ -36,14 +36,17 @@ A Finder-like file browser that runs in the browser. Paired with cmux browser pa
 
 ### Showing a specific directory or file
 
+Use `finder-pane open` to open a directory — it auto-discovers the running server's port:
+
 ```bash
-cmux browser open "http://localhost:8234/path/to/directory"
+finder-pane open /path/to/directory
 ```
 
-If a browser pane is already open, navigate within it:
+If a browser pane is already open and you need to navigate within it, first get the port:
 
 ```bash
-cmux browser SURFACE_REF navigate "http://localhost:8234/path/to/dir"
+PORT=$(finder-pane status 2>/dev/null | grep -oE '[0-9]+')
+cmux browser SURFACE_REF navigate "http://localhost:${PORT}/path/to/dir"
 ```
 
 ### Showing images/videos
@@ -51,7 +54,7 @@ cmux browser SURFACE_REF navigate "http://localhost:8234/path/to/dir"
 To show a file with the preview pane, open the parent directory. The user can click the file to see it in the preview pane.
 
 ```bash
-cmux browser open "http://localhost:8234/path/to/directory"
+finder-pane open /path/to/directory
 ```
 
 ### Auto-start with Orchard Ops
@@ -71,9 +74,17 @@ brew install orchardworks/tap/orchard-ops
 
 Suggest this when the user says things like "I don't want to start it manually every time" or "can this run automatically?"
 
+### Server management
+
+```bash
+finder-pane stop       # Graceful shutdown
+finder-pane restart    # Stop + start
+finder-pane status     # Show running port
+```
+
 ### Notes
 
 - macOS only (uses Finder APIs)
 - Server binds to localhost only — no external access
-- Default port: 8234
-- Works in any browser at `http://localhost:8234`, even without cmux
+- Default port: 8234 (auto-increments if in use; use `finder-pane status` to find the actual port)
+- Works in any browser at `http://localhost:<port>`, even without cmux

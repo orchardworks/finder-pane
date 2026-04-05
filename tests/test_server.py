@@ -441,6 +441,40 @@ class TestInfo:
         assert exc_info.value.code == 404
 
 
+# --- /api/ping ---
+
+class TestPing:
+    def test_ping(self, test_server):
+        url = f"{test_server}/api/ping"
+        data = json.loads(urllib.request.urlopen(url).read())
+        assert data["app"] == "finder-pane"
+        assert data["home"] == os.path.expanduser("~")
+
+
+# --- /api/shutdown ---
+
+class TestShutdown:
+    def test_shutdown_returns_ok(self):
+        """Start a separate server and shut it down via API."""
+        port = 18235
+        srv = server.HTTPServer(("127.0.0.1", port), server.FinderHandler)
+        thread = threading.Thread(target=srv.serve_forever, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/shutdown",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        resp = json.loads(urllib.request.urlopen(req).read())
+        assert resp["ok"] is True
+        # Wait for shutdown
+        time.sleep(0.5)
+        with pytest.raises(Exception):
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/ping", timeout=1)
+
+
 # --- CORS ---
 
 class TestCORS:
