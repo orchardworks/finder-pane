@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes
+
+      - name: Get tarball SHA256
+        id: sha
+        run: |
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | cut -d' ' -f1)
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "SHA256: $SHA"
+
+      - name: Update Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ github.ref_name }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+          TAP_REPO="orchardworks/homebrew-tap"
+
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" /tmp/tap
+          cd /tmp/tap
+
+          sed -i "s|url \".*\"|url \"https://github.com/${{ github.repository }}/archive/refs/tags/${VERSION}.tar.gz\"|" Formula/finder-pane.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/finder-pane.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "bump-finder-pane-${VERSION}"
+          git add Formula/finder-pane.rb
+          git commit -m "Bump finder-pane to ${VERSION}"
+          git push origin "bump-finder-pane-${VERSION}"
+
+          gh pr create \
+            --repo "$TAP_REPO" \
+            --title "Bump finder-pane to ${VERSION}" \
+            --body "Automated update from [finder-pane ${VERSION}](https://github.com/${{ github.repository }}/releases/tag/${VERSION})" \
+            --base main \
+            --head "bump-finder-pane-${VERSION}"
