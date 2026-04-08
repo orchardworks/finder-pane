@@ -160,6 +160,9 @@
   /* Dim selection in unfocused areas */
   body[data-focus="main"] .sidebar-item.active,
   body[data-focus="tray"] .sidebar-item.active { background: transparent; }
+  /* Preserve current-directory highlight even when also keyboard-selected */
+  body[data-focus="main"] .sidebar-item.current,
+  body[data-focus="tray"] .sidebar-item.current { background: var(--hover); }
   .sidebar-icon { font-size: 15px; width: 20px; text-align: center; }
 
   /* Sidebar preview (fallback when right preview pane is hidden) */
