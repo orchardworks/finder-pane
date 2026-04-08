@@ -536,6 +536,7 @@
     padding: 12px;
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    grid-auto-rows: minmax(170px, auto);
     gap: 14px;
     align-content: start;
   }
@@ -2069,7 +2070,9 @@ function renderGalleryView(preserveScroll = false) {
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
     item.setAttribute("aria-label", entry.name);
 
-    // Thumbnail: actual image preview for image files, icon otherwise
+    // Thumbnail: actual image preview for image files, icon otherwise.
+    // getIcon() may return an HTML span (e.g. for .app bundles with the
+    // lazy app-icon loader), so use innerHTML, not textContent.
     const thumb = document.createElement("div");
     thumb.className = "gallery-thumb";
     if (IMAGE_EXTS.has(entry.ext) && !entry.is_dir) {
@@ -2077,10 +2080,10 @@ function renderGalleryView(preserveScroll = false) {
       img.loading = "lazy";
       img.alt = entry.name;
       img.src = "/api/file?path=" + encodeURIComponent(entry.path);
-      img.onerror = () => { thumb.textContent = getIcon(entry); };
+      img.onerror = () => { thumb.innerHTML = getIcon(entry); };
       thumb.appendChild(img);
     } else {
-      thumb.textContent = getIcon(entry);
+      thumb.innerHTML = getIcon(entry);
     }
     item.appendChild(thumb);
 
@@ -2163,6 +2166,7 @@ function renderGalleryView(preserveScroll = false) {
 
   if (preserveScroll) container.scrollTop = savedScroll;
   updateStatusbar();
+  lazyLoadAppIcons();
 }
 
 function switchView(mode) {
