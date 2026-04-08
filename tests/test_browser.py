@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -59,8 +61,24 @@ def test_server(temp_dir):
     srv = server.ThreadingHTTPServer(("127.0.0.1", port), server.FinderHandler)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
-    time.sleep(0.5)
-    yield f"http://127.0.0.1:{port}"
+
+    # Wait for the server to actually accept requests. A fixed sleep is
+    # flaky on slow CI runners — the first few tests would time out while
+    # the server was still warming up. Poll /api/ping until it responds.
+    base_url = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + 10.0
+    while True:
+        try:
+            with urllib.request.urlopen(f"{base_url}/api/ping", timeout=1) as resp:
+                if resp.status == 200:
+                    break
+        except (urllib.error.URLError, ConnectionError, OSError):
+            pass
+        if time.monotonic() > deadline:
+            raise RuntimeError("test_server did not become ready within 10s")
+        time.sleep(0.05)
+
+    yield base_url
     srv.shutdown()
 
 
@@ -68,8 +86,10 @@ def test_server(temp_dir):
 def app(page: Page, test_server, temp_dir):
     """Navigate to the app and wait for initial load."""
     page.goto(f"{test_server}{temp_dir}")
-    # Wait for file list to render
-    page.wait_for_selector(".file-row", timeout=5000)
+    # Wait for file list to render. The timeout is generous because the
+    # first test in the session absorbs Chromium's cold start on CI; once
+    # the browser is warm, .file-row appears near-instantly.
+    page.wait_for_selector(".file-row", timeout=30000)
     return page
 
 
@@ -435,7 +455,7 @@ class TestMarkdownXSS:
             f.write("# Hello\n\n<script>window.__xss_fired=true</script>\n")
 
         page.goto(f"{test_server}{temp_dir}")
-        page.wait_for_selector(".file-row", timeout=5000)
+        page.wait_for_selector(".file-row", timeout=30000)
 
         # Click the markdown file to trigger preview
         row = page.query_selector(f'.file-row[data-path="{md_path}"]')
@@ -454,7 +474,7 @@ class TestMarkdownXSS:
             f.write("# Test\n\n<script>alert(1)</script>\n")
 
         page.goto(f"{test_server}{temp_dir}")
-        page.wait_for_selector(".file-row", timeout=5000)
+        page.wait_for_selector(".file-row", timeout=30000)
 
         row = page.query_selector(f'.file-row[data-path="{md_path}"]')
         if row:
@@ -475,7 +495,7 @@ class TestEscHtml:
             f.write("test")
 
         page.goto(f"{test_server}{temp_dir}")
-        page.wait_for_selector(".file-row", timeout=5000)
+        page.wait_for_selector(".file-row", timeout=30000)
 
         # The page should render without errors
         # Check no unclosed tags or broken attributes
