@@ -20,7 +20,7 @@ jobs:
         run: pip install pytest
 
       - name: Run server tests
-        run: pytest tests/test_server.py -v
+        run: pytest tests/test_server.py tests/test_server_edge.py -v
 
   e2e:
     runs-on: macos-latest
